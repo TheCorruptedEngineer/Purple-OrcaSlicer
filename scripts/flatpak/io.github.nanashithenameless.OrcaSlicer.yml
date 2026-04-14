@@ -329,8 +329,16 @@ modules:
 
       - | # Desktop integration files
         install -Dm644 -t /app/share/icons/hicolor/scalable/apps/ resources/images/OrcaSlicer.svg
-        install -Dm644 ${FLATPAK_ID}.metainfo.xml /app/share/metainfo/${FLATPAK_ID}.metainfo.xml
-        desktop-file-edit --set-key=Exec --set-value="entrypoint %U" /app/share/applications/${FLATPAK_ID}.desktop
+        install -Dm644 "${FLATPAK_ID}.metainfo.xml" "/app/share/metainfo/${FLATPAK_ID}.metainfo.xml"
+        # CMake (SLIC3R_FHS mode) installs the desktop file under the upstream app-id name;
+        # rename it to the Flatpak app-id so flatpak-builder's rename-icon post-processing
+        # can find and rewrite the Icon= field successfully.
+        mv "/app/share/applications/com.orcaslicer.OrcaSlicer.desktop" \
+           "/app/share/applications/${FLATPAK_ID}.desktop"
+        desktop-file-edit --set-key=Exec --set-value="entrypoint %U" \
+          "/app/share/applications/${FLATPAK_ID}.desktop"
+        # Sanity check: ensure the desktop file exists at the expected path
+        ls -l "/app/share/applications/${FLATPAK_ID}.desktop"
         install -Dm755 entrypoint /app/bin
         install -Dm755 umount /app/bin
 
