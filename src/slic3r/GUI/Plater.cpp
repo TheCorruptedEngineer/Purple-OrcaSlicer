@@ -4029,6 +4029,8 @@ void Sidebar::update_printer_thumbnail()
     if (printer_thumbnails.find(printer_type) != printer_thumbnails.end()) // Use known cache first
         p->image_printer->SetBitmap(create_scaled_bitmap(printer_thumbnails[printer_type], this, PRINTER_THUMBNAIL_SIZE.GetHeight()));
     else {
+        /* ORCA this part check images folder for BBL covers but not checks file existence and causes crash on Linux
+        *       BBL covers already exist on profile folder so no need to use this section
         try {
             // No cache, try dedicated printer preview
             p->image_printer->SetBitmap(create_scaled_bitmap("printer_preview_" + printer_type, this, 48));
@@ -4036,6 +4038,7 @@ void Sidebar::update_printer_thumbnail()
             printer_thumbnails[printer_type] = "printer_preview_" + printer_type;
             return;
         } catch (...) {}
+        */
 
         // Orca: try to use the printer model cover as the thumbnail
         const auto model_name = selected_preset.config.opt_string("printer_model");
@@ -4875,13 +4878,13 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
         "extruder_clearance_radius",
         "extruder_clearance_height_to_lid", "extruder_clearance_height_to_rod",
 		"nozzle_height", "skirt_type", "skirt_loops", "skirt_speed","min_skirt_length", "skirt_distance", "skirt_start_angle",
-        "brim_width", "brim_object_gap", "brim_use_efc_outline", "combine_brims", "brim_type", "nozzle_diameter", "single_extruder_multi_material", "preferred_orientation",
+        "brim_width", "brim_object_gap", "brim_flow_ratio", "brim_use_efc_outline", "combine_brims", "brim_type", "nozzle_diameter", "single_extruder_multi_material", "preferred_orientation",
         "enable_prime_tower", "wipe_tower_x", "wipe_tower_y", "prime_tower_width", "prime_tower_brim_width", "prime_tower_skip_points", "prime_tower_enable_framework",
         "prime_tower_infill_gap", "prime_volume",
         "extruder_colour", "filament_colour", "filament_type", "material_colour", "printable_height", "extruder_printable_height", "printer_model", "printer_technology",
         // These values are necessary to construct SlicingParameters by the Canvas3D variable layer height editor.
         "layer_height", "initial_layer_print_height", "min_layer_height", "max_layer_height",
-        "brim_width", "wall_loops", "wall_filament", "sparse_infill_density", "sparse_infill_filament", "top_shell_layers",
+        "wall_loops", "wall_filament", "sparse_infill_density", "sparse_infill_filament", "top_shell_layers",
         "enable_support", "support_filament", "support_interface_filament",
         "support_top_z_distance", "support_bottom_z_distance", "raft_layers",
         "wipe_tower_rotation_angle", "wipe_tower_cone_angle", "wipe_tower_extra_spacing", "wipe_tower_extra_flow", "wipe_tower_max_purge_speed",
@@ -5950,9 +5953,9 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                                                  if (cancel)
                                                                      is_user_cancel = cancel;
                                                              });
-                    BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__
-                                            << boost::format(", plate_data.size %1%, project_preset.size %2%, is_bbs_3mf %3%, file_version %4% \n") % plate_data.size() %
-                                                   project_presets.size() % (en_3mf_file_type == En3mfType::From_BBS) % file_version.to_string();
+                          BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__
+                                      << boost::format(", plate_data.size %1%, project_preset.size %2%, is_bbs_or_orca_3mf %3%, file_version %4% \n") % plate_data.size() %
+                                          project_presets.size() % (en_3mf_file_type == En3mfType::From_BBS || en_3mf_file_type == En3mfType::From_Orca) % file_version.to_string();
 
                     // 1. add extruder for prusa model if the number of existing extruders is not enough
                     // 2. add extruder for BBS or Other model if only import geometry
@@ -5994,88 +5997,123 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                         if(load_type != LoadType::LoadGeometry)
                             show_info(q, _L("The 3MF is not supported by OrcaSlicer, loading geometry data only."), _L("Load 3MF"));
                     }
-                    // else if (load_config && (file_version.maj() != app_version.maj())) {
-                    //     // version mismatch, only load geometries
-                    //     load_config = false;
-                    //     if (!load_model) {
-                    //         // only load config case, return directly
-                    //         show_info(q, _L("The Config cannot be loaded."), _L("Load 3MF"));
-                    //         q->skip_thumbnail_invalid = false;
-                    //         return empty_result;
-                    //     }
-                    //     load_old_project = true;
-                    //     // select view to 3D
-                    //     q->select_view_3D("3D");
-                    //     // select plate 0 as default
-                    //     q->select_plate(0);
-                    //     if (load_type != LoadType::LoadGeometry) {
-                    //         if (en_3mf_file_type == En3mfType::From_BBS)
-                    //             show_info(q, _L("The 3MF was generated by an old OrcaSlicer, loading geometry data only."), _L("Load 3MF"));
-                    //         else
-                    //             show_info(q, _L("The 3MF is not supported by OrcaSlicer, loading geometry data only."), _L("Load 3MF"));
-                    //     }
-                    //     for (ModelObject *model_object : model.objects) {
-                    //         model_object->config.reset();
-                    //         // Is there any modifier or advanced config data?
-                    //         for (ModelVolume *model_volume : model_object->volumes) model_volume->config.reset();
-                    //     }
-                    // }
-                    // Orca: check if the project is created with OrcaSlicer 2.3.1-alpha and use the sparse infill rotation template for non-safe infill patterns
-                    else if (load_config && (file_version < app_version) && file_version == Semver("2.3.1-alpha")) {
-                        if (!config_loaded.opt_string("sparse_infill_rotate_template").empty()) {
-                            const auto _sparse_infill_pattern =
-                                config_loaded.option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value;
-                            bool is_safe_to_rotate = _sparse_infill_pattern == ipRectilinear || _sparse_infill_pattern == ipLine ||
-                                                     _sparse_infill_pattern == ipZigZag || _sparse_infill_pattern == ipCrossZag ||
-                                                     _sparse_infill_pattern == ipLockedZag;
-                            if (!is_safe_to_rotate) {
-                                wxString msg_text = _(
-                                    L("This project was created with an OrcaSlicer 2.3.1-alpha and uses "
-                                      "infill rotation template settings that may not work properly with your current infill pattern. "
-                                      "This could result in weak support or print quality issues."));
-                                msg_text += "\n\n" +
-                                            _(L("Would you like OrcaSlicer to automatically fix this by clearing the rotation template settings?"));
-                                MessageDialog dialog(wxGetApp().plater(), msg_text, "", wxICON_WARNING | wxYES | wxNO);
-                                dialog.SetButtonLabel(wxID_YES, _L("Yes"));
-                                dialog.SetButtonLabel(wxID_NO, _L("No"));
-                                if (dialog.ShowModal() == wxID_YES) {
-                                    config_loaded.opt_string("sparse_infill_rotate_template") = "";
+                    else if (en_3mf_file_type == En3mfType::From_Orca) {
+                        // OrcaSlicer file (has OrcaSlicer tag) - compare file_version with SoftFever_VERSION
+                        // Migration fix for OrcaSlicer 2.3.1-alpha sparse infill rotation template
+                        if (load_config && (file_version < app_version) && file_version == Semver("2.3.1-alpha")) {
+                            if (!config_loaded.opt_string("sparse_infill_rotate_template").empty()) {
+                                const auto _sparse_infill_pattern =
+                                    config_loaded.option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value;
+                                bool is_safe_to_rotate = _sparse_infill_pattern == ipRectilinear || _sparse_infill_pattern == ipLine ||
+                                                         _sparse_infill_pattern == ipZigZag || _sparse_infill_pattern == ipCrossZag ||
+                                                         _sparse_infill_pattern == ipLockedZag;
+                                if (!is_safe_to_rotate) {
+                                    wxString msg_text = _(
+                                        L("This project was created with an OrcaSlicer 2.3.1-alpha and uses "
+                                          "infill rotation template settings that may not work properly with your current infill pattern. "
+                                          "This could result in weak support or print quality issues."));
+                                    msg_text += "\n\n" +
+                                                _(L("Would you like OrcaSlicer to automatically fix this by clearing the rotation template settings?"));
+                                    MessageDialog dialog(wxGetApp().plater(), msg_text, "", wxICON_WARNING | wxYES | wxNO);
+                                    dialog.SetButtonLabel(wxID_YES, _L("Yes"));
+                                    dialog.SetButtonLabel(wxID_NO, _L("No"));
+                                    if (dialog.ShowModal() == wxID_YES) {
+                                        config_loaded.opt_string("sparse_infill_rotate_template") = "";
+                                    }
+                                }
+                            }
+                        } else if (load_config && (file_version > app_version)) {
+                            if (config_substitutions.unrecogized_keys.size() > 0) {
+                                wxString text  = wxString::Format(_L("The 3MF file version %s is newer than %s's version %s, found the following unrecognized keys:"),
+                                                                 file_version.to_string_sf(), std::string(SLIC3R_APP_FULL_NAME), app_version.to_string_sf());
+                                text += "\n";
+                                wxString context = text;
+                                wxString append = _L("You'd better upgrade your software.\n");
+                                context += "\n\n";
+                                context += append;
+                                show_info(q, context, _L("Newer 3MF version"));
+                            }
+                            else {
+                                //if the minor version is not matched
+                                if (file_version.min() != app_version.min()) {
+                                    wxString text  = wxString::Format(_L("The 3MF file version %s is newer than %s's version %s, we suggest to upgrade your software."),
+                                                     file_version.to_string_sf(), std::string(SLIC3R_APP_FULL_NAME), app_version.to_string_sf());
+                                    text += "\n";
+                                    show_info(q, text, _L("Newer 3MF version"));
                                 }
                             }
                         }
-
-                    } else if (load_config && (file_version > app_version)) {
-                        if (config_substitutions.unrecogized_keys.size() > 0) {
-                            wxString text  = wxString::Format(_L("The 3MF file version %s is newer than %s's version %s, found the following unrecognized keys:"),
-                                                             file_version.to_string(), std::string(SLIC3R_APP_FULL_NAME), app_version.to_string());
-                            text += "\n";
-                            bool     first = true;
-                            // std::string context = into_u8(text);
-                            wxString context = text;
-                            // if (wxGetApp().app_config->get("user_mode") == "develop") {
-                            //     for (auto &key : config_substitutions.unrecogized_keys) {
-                            //         context += "  -";
-                            //         context += key;
-                            //         context += ";\n";
-                            //         first = false;
-                            //     }
-                            // }
-                            wxString append = _L("You'd better upgrade your software.\n");
-                            context += "\n\n";
-                            // context += into_u8(append);
-                            context += append;
-                            show_info(q, context, _L("Newer 3MF version"));
+                        else if (load_config && config_loaded.empty()) {
+                            load_config = false;
+                            show_info(q, _L("The 3MF file was generated by an old OrcaSlicer version, loading geometry data only."), _L("Load 3MF"));
                         }
-                        else {
-                            //if the minor version is not matched
-                            if (file_version.min() != app_version.min()) {
-                                wxString text  = wxString::Format(_L("The 3MF file version %s is newer than %s's version %s, we suggest to upgrade your software."),
-                                                 file_version.to_string(), std::string(SLIC3R_APP_FULL_NAME), app_version.to_string());
-                                text += "\n";
-                                show_info(q, text, _L("Newer 3MF version"));
+                    }
+                    else if (en_3mf_file_type == En3mfType::From_BBS) {
+                        // No OrcaSlicer tag - check Bambu/Application version
+                        Semver orca_tag_start_version(2, 3, 2);
+                        if (file_version <= orca_tag_start_version) {
+                            // Compatible old version (before OrcaSlicer tagging was introduced after 2.3.2).
+                            // Any version prior or equal to 2.3.2 is older than the current one, no version warnings needed.
+                            // Still apply migration fixes for known old versions.
+                            if (load_config && (file_version == Semver("2.3.1-alpha"))) {
+                                if (!config_loaded.opt_string("sparse_infill_rotate_template").empty()) {
+                                    const auto _sparse_infill_pattern =
+                                        config_loaded.option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value;
+                                    bool is_safe_to_rotate = _sparse_infill_pattern == ipRectilinear || _sparse_infill_pattern == ipLine ||
+                                                             _sparse_infill_pattern == ipZigZag || _sparse_infill_pattern == ipCrossZag ||
+                                                             _sparse_infill_pattern == ipLockedZag;
+                                    if (!is_safe_to_rotate) {
+                                        wxString msg_text = _(
+                                            L("This project was created with an OrcaSlicer 2.3.1-alpha and uses "
+                                              "infill rotation template settings that may not work properly with your current infill pattern. "
+                                              "This could result in weak support or print quality issues."));
+                                        msg_text += "\n\n" +
+                                                    _(L("Would you like OrcaSlicer to automatically fix this by clearing the rotation template settings?"));
+                                        MessageDialog dialog(wxGetApp().plater(), msg_text, "", wxICON_WARNING | wxYES | wxNO);
+                                        dialog.SetButtonLabel(wxID_YES, _L("Yes"));
+                                        dialog.SetButtonLabel(wxID_NO, _L("No"));
+                                        if (dialog.ShowModal() == wxID_YES) {
+                                            config_loaded.opt_string("sparse_infill_rotate_template") = "";
+                                        }
+                                    }
+                                }
+                            }
+                            else if (load_config && config_loaded.empty()) {
+                                load_config = false;
+                                show_info(q, _L("The 3MF file was generated by an older version, loading geometry data only."), _L("Load 3MF"));
+                            }
+                        } else {
+                            // BambuStudio project (version > 2.3.2 without OrcaSlicer tag)
+                            // Report that a BambuStudio project is being imported and compare with SLIC3R_VERSION
+                            Semver slic3r_version = *(Semver::parse(SLIC3R_VERSION));
+                            if (load_config && config_loaded.empty()) {
+                                load_config = false;
+                                show_info(q, _L("The 3MF file was generated by BambuStudio, loading geometry data only."), _L("Load 3MF"));
+                            }
+                            else if (load_config && (file_version > slic3r_version)) {
+                                // BambuStudio file version is newer than our compatible SLIC3R_VERSION
+                                if (config_substitutions.unrecogized_keys.size() > 0) {
+                                    wxString text  = wxString::Format(_L("The 3MF was created by BambuStudio (version %s), which is newer than the compatible version %s. Found unrecognized settings:"),
+                                                                     file_version.to_string(), slic3r_version.to_string());
+                                    text += "\n";
+                                    wxString context = text;
+                                    wxString append = _L("You'd better upgrade your software.\n");
+                                    context += "\n\n";
+                                    context += append;
+                                    show_info(q, context, _L("BambuStudio Project"));
+                                } else {
+                                    wxString text  = wxString::Format(_L("The 3MF was created by BambuStudio (version %s), which is newer than the compatible version %s. Some settings may not be fully compatible."),
+                                                     file_version.to_string(), slic3r_version.to_string());
+                                    text += "\n";
+                                    show_info(q, text, _L("BambuStudio Project"));
+                                }
+                            } else if (load_config) {
+                                // BambuStudio version is older or same as our SLIC3R_VERSION
+                                wxString text = _L("The 3MF was created by BambuStudio. Some settings may differ from OrcaSlicer.");
+                                show_info(q, text, _L("BambuStudio Project"));
                             }
                         }
-                    } 
+                    }
                     else if (load_config && config_loaded.empty()) {
                         load_config = false;
                         show_info(q, _L("The 3MF file was generated by an old OrcaSlicer version, loading geometry data only."), _L("Load 3MF"));
@@ -6116,7 +6154,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                         }
 
                         Semver old_version(1, 5, 9);
-                        if ((en_3mf_file_type == En3mfType::From_BBS) && (file_version < old_version) && load_model && load_config && !config_loaded.empty()) {
+                        if ((en_3mf_file_type == En3mfType::From_BBS || en_3mf_file_type == En3mfType::From_Orca) && (file_version < old_version) && load_model && load_config && !config_loaded.empty()) {
                             translate_old = true;
                             partplate_list.get_plate_size(current_width, current_depth, current_height);
                         }
@@ -6203,7 +6241,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                         {
                             // BBS: modify the prime tower params for old version file
                             Semver old_version3(2, 0, 0);
-                            if (en_3mf_file_type == En3mfType::From_BBS && file_version < old_version3) {
+                            if ((en_3mf_file_type == En3mfType::From_BBS || en_3mf_file_type == En3mfType::From_Orca) && file_version < old_version3) {
                                 double old_filament_prime_volume = 0.;
                                 int    filament_count            = 0;
                                 {

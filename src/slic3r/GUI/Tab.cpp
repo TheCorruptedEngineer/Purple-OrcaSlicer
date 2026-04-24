@@ -67,6 +67,9 @@ namespace GUI {
 
 #define DISABLE_UNDO_SYS
 
+// Forward declaration for early use; definitions live later in this translation unit.
+static void validate_custom_gcode_cb(Tab* tab, const wxString& title, const t_config_option_key& opt_key, const boost::any& value);
+
 static const std::vector<std::string> plate_keys = { "curr_bed_type", "skirt_start_angle", "first_layer_print_sequence", "first_layer_sequence_choice", "other_layers_print_sequence", "other_layers_sequence_choice", "print_sequence", "spiral_mode"};
 
 void Tab::Highlighter::set_timer_owner(wxEvtHandler* owner, int timerid/* = wxID_ANY*/)
@@ -2664,6 +2667,7 @@ void TabPrint::build()
         optgroup->append_single_option_line("brim_type", "others_settings_brim#type");
         optgroup->append_single_option_line("brim_width", "others_settings_brim#width");
         optgroup->append_single_option_line("brim_object_gap", "others_settings_brim#brim-object-gap");
+        optgroup->append_single_option_line("brim_flow_ratio", "others_settings_brim#brim-flow-ratio");
         optgroup->append_single_option_line("brim_use_efc_outline", "others_settings_brim#brim-use-efc-outline");
         optgroup->append_single_option_line("combine_brims", "others_settings_brim#combine-brims");
         optgroup->append_single_option_line("brim_ears_max_angle", "others_settings_brim#ear-max-angle");
@@ -2705,6 +2709,17 @@ void TabPrint::build()
         option.opt.multiline = true;
         // option.opt.height = 5;
         optgroup->append_single_option_line(option, "others_settings_g_code_output#filename-format");
+
+        optgroup = page->new_optgroup(L("Change extrusion role G-code"), L"param_gcode", 0);
+        optgroup->m_on_change = [this, &optgroup_title = optgroup->title](const t_config_option_key& opt_key, const boost::any& value) {
+            validate_custom_gcode_cb(this, optgroup_title, opt_key, value);
+        };
+        optgroup->edit_custom_gcode = [this](const t_config_option_key& opt_key) { edit_custom_gcode(opt_key); };
+        option = optgroup->get_option("process_change_extrusion_role_gcode");
+        option.opt.full_width = true;
+        option.opt.is_code = true;
+        option.opt.height = 15;
+        optgroup->append_single_option_line(option);
 
         optgroup = page->new_optgroup(L("Post-processing Scripts"), L"param_gcode", 0);
         option = optgroup->get_option("post_process");
@@ -4067,6 +4082,17 @@ void TabFilament::build()
         };
         optgroup->edit_custom_gcode = edit_custom_gcode_fn;
         option = optgroup->get_option("filament_start_gcode");
+        option.opt.full_width = true;
+        option.opt.is_code = true;
+        option.opt.height = gcode_field_height;// 150;
+        optgroup->append_single_option_line(option);
+
+        optgroup = page->new_optgroup(L("Change extrusion role G-code"), L"param_gcode", 0);
+        optgroup->m_on_change = [this, &optgroup_title = optgroup->title](const t_config_option_key& opt_key, const boost::any& value) {
+            validate_custom_gcode_cb(this, optgroup_title, opt_key, value);
+        };
+        optgroup->edit_custom_gcode = edit_custom_gcode_fn;
+        option = optgroup->get_option("filament_change_extrusion_role_gcode");
         option.opt.full_width = true;
         option.opt.is_code = true;
         option.opt.height = gcode_field_height;// 150;
