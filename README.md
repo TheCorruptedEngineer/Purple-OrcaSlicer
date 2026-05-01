@@ -49,7 +49,7 @@ This fork **does not publish stable builds**, for stability and sanity **go to t
 
 ## Windows
 
-Download the **Windows Installer exe** for your preferred version from the [releases page](https://github.com/NanashiTheNameless/OrcaSlicer/releases/latest).
+Download the **Windows Installer exe** for your preferred version from the [releases page]([https://github.com/NanashiTheNameless/OrcaSlicer/releases/latest](https://github.com/NanashiTheNameless/OrcaSlicer/releases/tag/Nightly-Rolling)).
 
  - *For convenience there is also a portable build available.*
     <details>
@@ -86,21 +86,21 @@ Download the **Windows Installer exe** for your preferred version from the [rele
 ## Linux         
 
 ### Flathub (Recommended)
-OrcaSlicer is available through FlatHub:
+This OrcaSlicer fork is **NOT** available through FlatHub!
 
-<a href='https://flathub.org/apps/com.orcaslicer.OrcaSlicer'><img width='240' alt='Download on Flathub' src='https://dl.flathub.org/assets/badges/flathub-badge-en.png'/></a>
+<https://github.com/NanashiTheNameless/OrcaSlicer/releases/tag/Nightly-Rolling>
 
 Install from the command line:
 
 ```shell
-flatpak install flathub com.orcaslicer.OrcaSlicer
+flatpak install /path/to/orca/OrcaSlicer-Linux-flatpak_nightly_<arch>.flatpak
 flatpak run com.orcaslicer.OrcaSlicer
 ```
 
 It can also be installed through graphical software managers (KDE Discover, GNOME Software, etc.) when Flathub is enabled. Search for **OrcaSlicer** in your software center.
 
 ### AppImage
- 1. Download App image from the [releases page](https://github.com/OrcaSlicer/OrcaSlicer/releases).
+ 1. Download App image from the [releases page](<https://github.com/NanashiTheNameless/OrcaSlicer/releases/tag/Nightly-Rolling>).
  2. Double click the downloaded file to run it.
 
  3. If you run into trouble executing it, try this command in the terminal:
