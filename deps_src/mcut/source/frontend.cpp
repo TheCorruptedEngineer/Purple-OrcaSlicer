@@ -146,17 +146,9 @@ inline int trailing_zeroes(uint32_t v)
 #pragma warning(default : 4146)
 #endif // #ifdef _WIN32
 
-// dereferencing type-punned pointer will break strict-aliasing rules
-#if __linux__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
-#endif
-
-    r = (*(uint32_t*)&f >> 23) - 0x7f;
-
-#if __linux__
-#pragma GCC diagnostic pop
-#endif
+    uint32_t f_bits = 0;
+    memcpy(&f_bits, &f, sizeof(f_bits));
+    r = int((f_bits >> 23) - 0x7f);
     return r;
 }
 
