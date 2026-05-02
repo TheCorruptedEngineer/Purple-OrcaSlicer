@@ -6237,6 +6237,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
     Point first_point = path.first_point();
     if (!m_last_pos_defined || m_last_pos.to_point() != first_point || m_need_change_layer_lift_z || slope_need_z_travel) {
         const bool _last_pos_undefined = !m_last_pos_defined;
+        const bool need_layer_lift_z_sync = m_need_change_layer_lift_z;
 
         double z = DBL_MAX;
         if (sloped != nullptr) {
@@ -6247,9 +6248,8 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
 
         gcode += this->travel_to(first_point, path.role(), "move to first " + description + " point", z);
 
-        m_need_change_layer_lift_z = false;
         // Orca: ensure Z matches planned layer height
-        if (!slope_need_z_travel && (_last_pos_undefined || m_need_change_layer_lift_z)) {
+        if (!slope_need_z_travel && (_last_pos_undefined || need_layer_lift_z_sync)) {
             const std::string z_sync_comment = _last_pos_undefined ?
                 "ensure Z matches planned layer height" : ""; // no comment for normal layer-Z lift
             gcode += this->writer().travel_to_z(m_nominal_z, z_sync_comment, true);

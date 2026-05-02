@@ -738,7 +738,9 @@ void PrintObject::contour_z()
 
     TriangleMesh mesh = this->m_model_object->raw_mesh();
     if (m_model_object->instances.size() != 1) {
-        throw RuntimeError("ContourZ: unexpected number of instances");
+        BOOST_LOG_TRIVIAL(warning) << "ContourZ: skipping object with " << m_model_object->instances.size() << " instances";
+        this->set_done(posContouring);
+        return;
     }
 
     ModelInstance *inst = m_model_object->instances.front();

@@ -2295,6 +2295,12 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
                 obj->make_perimeters();
                 obj->infill();
                 obj->ironing();
+                if (obj->need_z_contouring())
+                    obj->contour_z();
+                else {
+                    if (obj->set_started(posContouring))
+                        obj->set_done(posContouring);
+                }
                 obj->generate_support_material();
                 obj->detect_overhangs_for_lift();
                 obj->estimate_curled_extrusions();

@@ -2,6 +2,8 @@
 
 #include <tbb/parallel_for.h>
 
+#include <algorithm>
+
 #include "ClipperUtils.hpp"
 #include "ElephantFootCompensation.hpp"
 #include "Exception.hpp"
@@ -47,9 +49,11 @@ LayerPtrs new_layers(
             }
         }
         if (zaa_active) {
-            slice_z = lo + z_offset;
-            if (slice_z < lo || slice_z > hi) {
-                throw RuntimeError("Bad min Z value");
+            const coordf_t layer_height = hi - lo;
+            const coordf_t clamped_offset = std::clamp(z_offset, coordf_t(0.0), layer_height);
+            slice_z = lo + clamped_offset;
+            if (slice_z < lo - EPSILON || slice_z > hi + EPSILON) {
+                throw RuntimeError("Bad min Z value: computed slice_z is outside current layer span");
             }
         }
         Layer *layer = new Layer(id ++, print_object, hi - lo, hi + zmin, slice_z);

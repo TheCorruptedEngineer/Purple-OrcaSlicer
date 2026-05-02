@@ -72,10 +72,17 @@ static bool contour_extrusion_path(LayerRegion *region, const sla::IndexedMesh &
 			sla::IndexedMesh::hit_result hit_up = mesh.query_ray_hit({x, y, mesh_z}, {0.0, 0.0, 1.0});
 			sla::IndexedMesh::hit_result hit_down = mesh.query_ray_hit({x, y, mesh_z}, {0.0, 0.0, -1.0});
 
-			double up = hit_up.distance();
-			double down = hit_down.distance();
-			double d = up < down ? up : -down;
-			const Vec3d &normal = (up < down ? hit_up : hit_down).normal();
+			const bool has_up = hit_up.is_hit();
+			const bool has_down = hit_down.is_hit();
+			double d = 0.0;
+			Vec3d normal = Vec3d::UnitZ();
+			if (has_up && (!has_down || hit_up.distance() <= hit_down.distance())) {
+				d = hit_up.distance();
+				normal = hit_up.normal();
+			} else if (has_down) {
+				d = -hit_down.distance();
+				normal = hit_down.normal();
+			}
 			
 			double max_up = min_z;
 			double min_down = -(height - min_z);
@@ -85,11 +92,11 @@ static bool contour_extrusion_path(LayerRegion *region, const sla::IndexedMesh &
 				min_down = -(height + 0.1);
 			}
 
-            if (is_perimeter(path.role())) {
+			if ((has_up || has_down) && is_perimeter(path.role())) {
                 double slope_rad     = slope_from_normal(normal);
                 double slope_degrees = slope_rad * 180.0 / M_PI;
 
-                if (d > min_down && minimize_perimeter_height_angle > 0 && minimize_perimeter_height_angle < slope_degrees) {
+				if (d > min_down && minimize_perimeter_height_angle > 0 && slope_degrees < minimize_perimeter_height_angle) {
                     double adjustment = follow_slope_down(slope_rad, half_width);
                     if (adjustment > 0) {
                         throw RuntimeError("ContourZ: got positive adjustment");
