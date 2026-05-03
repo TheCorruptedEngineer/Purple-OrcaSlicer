@@ -254,6 +254,7 @@ jobs:
         with:
           name: PDB
           path: ${{ github.workspace }}/build/src/Release/Debug_PDB_${{ env.ver }}_for_developers_only.7z
+          if-no-files-found: warn
 
       - name: Upload OrcaSlicer_profile_validator Win
         if: inputs.os == 'windows-latest'
