@@ -35,9 +35,9 @@ static bool contour_extrusion_path(LayerRegion *region, const sla::IndexedMesh &
     if (path.role() != erTopSolidInfill && path.role() != erIroning && path.role() != erExternalPerimeter && path.role() != erPerimeter) {
 		return false;
 	}
-	
+
 	Layer *layer = region->layer();
-	coordf_t mesh_z = layer->print_z + mesh.ground_level();
+	coordf_t mesh_slice_z = layer->slice_z + mesh.ground_level();
 	coordf_t min_z = region->region().config().zaa_min_z;
 
 	const Points3 &points = path.polyline.points;
@@ -74,21 +74,9 @@ static bool contour_extrusion_path(LayerRegion *region, const sla::IndexedMesh &
             coordf_t x = p.x();
 			coordf_t y = p.y();
 
-			sla::IndexedMesh::hit_result hit_up = mesh.query_ray_hit({x, y, mesh_z}, {0.0, 0.0, 1.0});
-			sla::IndexedMesh::hit_result hit_down = mesh.query_ray_hit({x, y, mesh_z}, {0.0, 0.0, -1.0});
+			sla::IndexedMesh::hit_result hit_up = mesh.query_ray_hit({x, y, mesh_slice_z}, {0.0, 0.0, 1.0});
 
-			const bool has_up = hit_up.is_hit();
-			const bool has_down = hit_down.is_hit();
-			double d = 0.0;
-			Vec3d normal = Vec3d::UnitZ();
-			if (has_up && (!has_down || hit_up.distance() <= hit_down.distance())) {
-				d = hit_up.distance();
-				normal = hit_up.normal();
-			} else if (has_down) {
-				d = -hit_down.distance();
-				normal = hit_down.normal();
-			}
-			
+			double d = hit_up.distance() - (layer->print_z - layer->slice_z);
 			double max_up = min_z;
 			double min_down = -(height - min_z);
 			double half_width = path.width / 2.0;
@@ -97,7 +85,8 @@ static bool contour_extrusion_path(LayerRegion *region, const sla::IndexedMesh &
 				min_down = -(height + 0.1);
 			}
 
-			if ((has_up || has_down) && is_perimeter(path.role())) {
+            if (is_perimeter(path.role()) && hit_up.is_hit()) {
+				const Vec3d &normal = hit_up.normal();
                 double slope_rad     = slope_from_normal(normal);
                 double slope_degrees = slope_rad * 180.0 / M_PI;
 
@@ -169,14 +158,14 @@ static bool contour_extrusion_path(LayerRegion *region, const sla::IndexedMesh &
 	return true;
 }
 
-static void contour_extrusion_multipath(LayerRegion *region, const sla::IndexedMesh &mesh, ExtrusionMultiPath &multipath) 
+static void contour_extrusion_multipath(LayerRegion *region, const sla::IndexedMesh &mesh, ExtrusionMultiPath &multipath)
 {
 	for (ExtrusionPath &path : multipath.paths) {
 		contour_extrusion_path(region, mesh, path);
 	}
 }
 
-static void contour_extrusion_loop(LayerRegion *region, const sla::IndexedMesh &mesh, ExtrusionLoop &loop) 
+static void contour_extrusion_loop(LayerRegion *region, const sla::IndexedMesh &mesh, ExtrusionLoop &loop)
 {
 	for (ExtrusionPath &path : loop.paths) {
 		contour_extrusion_path(region, mesh, path);
