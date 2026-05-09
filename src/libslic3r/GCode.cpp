@@ -6304,10 +6304,10 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
 
         gcode += this->travel_to(first_point, path.role(), "move to first " + description + " point", z);
 
-        // Orca: ensure Z matches planned layer height
+        // Orca: ensure Z matches planned path Z
         if (!slope_need_z_travel && (_last_pos_undefined || need_layer_lift_z_sync)) {
             const std::string z_sync_comment = _last_pos_undefined ?
-                "ensure Z matches planned layer height" : ""; // no comment for normal layer-Z lift
+                "ensure Z matches planned path Z" : ""; // no comment for normal layer-Z lift
             gcode += this->writer().travel_to_z(target_z, z_sync_comment, true);
         }
         m_need_change_layer_lift_z = false;
