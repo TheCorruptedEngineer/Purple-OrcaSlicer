@@ -6270,8 +6270,9 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
         description += " (bridge)";
 
     const ExtrusionPathSloped* sloped = dynamic_cast<const ExtrusionPathSloped*>(&path);
-    const bool has_staggered_z_offset = sloped == nullptr && !path.z_contoured && !is_approx(path.z_offset, 0.0f);
-    const double target_z = has_staggered_z_offset ? m_nominal_z + path.z_offset * path.height : m_nominal_z;
+    const bool should_apply_staggered_offset = sloped == nullptr && !path.z_contoured && !is_approx(path.z_offset, 0.0f);
+    // path.z_offset is expressed in layer-height units.
+    const double target_z = should_apply_staggered_offset ? m_nominal_z + path.z_offset * path.height : m_nominal_z;
 
     const auto get_sloped_z = [&sloped, this](double z_ratio) {
         const auto height = sloped->height;
@@ -6297,7 +6298,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
             z =  get_sloped_z(sloped->slope_begin.z_ratio);
         } else if (path.z_contoured && !path.polyline.lines().empty()) {
             z = unscale_(path.polyline.lines().begin()->a.z()) + m_nominal_z;
-        } else if (has_staggered_z_offset) {
+        } else if (should_apply_staggered_offset) {
             z = target_z;
         }
 
@@ -6322,7 +6323,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
     if (!path.z_contoured && sloped == nullptr) {
         double current_z = m_writer.get_position().z();
         if (GCodeFormatter::quantize_xyzf(current_z) != GCodeFormatter::quantize_xyzf(target_z)) {
-            gcode += this->writer().travel_to_z(target_z, has_staggered_z_offset ? "set Z for staggered perimeter" : "reset Z after contouring", true);
+            gcode += this->writer().travel_to_z(target_z, should_apply_staggered_offset ? "set Z for staggered perimeter" : "reset Z after contouring", true);
         }
     }
 
