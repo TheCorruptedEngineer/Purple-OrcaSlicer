@@ -86,7 +86,7 @@ static ClipperLib_Z::Paths expolygons_to_zpaths_expanded_opened(
     ClipperLib::Paths expansion_cache;
     for (const ExPolygon &expoly : src) {
         for (size_t icontour = 0; icontour < expoly.num_contours(); ++ icontour) {
-            // Execute reorients the contours so that the outer most contour has a positive area. Thus the output
+            // Execute reorients the contours so that the outermost contour has a positive area. Thus the output
             // contours will be CCW oriented even though the input paths are CW oriented.
             // Offset is applied after contour reorientation, thus the signum of the offset value is reversed.
             offsetter.Clear();
@@ -351,7 +351,7 @@ static ClipperLib::Paths wavefront_step(ClipperLib::ClipperOffset &co, const Cli
     ClipperLib::Paths out_this;
     for (const ClipperLib::Path &polygon : polygons) {
         co.Clear();
-        // Execute reorients the contours so that the outer most contour has a positive area. Thus the output
+        // Execute reorients the contours so that the outermost contour has a positive area. Thus the output
         // contours will be CCW oriented even though the input paths are CW oriented.
         // Offset is applied after contour reorientation, thus the signum of the offset value is reversed.
         co.AddPath(polygon, jtRound, ClipperLib::etClosedPolygon);

@@ -2716,7 +2716,7 @@ void Print::_make_skirt()
             // Generate the skirt centerline.
             Polygon loop;
             {
-                // BBS. skirt_distance is defined as the gap between skirt and outer most brim, so no need to add max_brim_width
+                // BBS. skirt_distance is defined as the gap between skirt and outermost brim, so no need to add max_brim_width
                 Polygons loops = offset(convex_hull, distance, ClipperLib::jtRound, float(scale_(0.1)));
                 Geometry::simplify_polygons(loops, scale_(0.05), &loops);
 			    if (loops.empty())
@@ -2773,7 +2773,7 @@ void Print::_make_skirt()
                 object_skirt_distance += float(scale_(spacing));
                 Polygon loop;
                 {
-                    // BBS. skirt_distance is defined as the gap between skirt and outer most brim, so no need to add max_brim_width
+                    // BBS. skirt_distance is defined as the gap between skirt and outermost brim, so no need to add max_brim_width
                     Polygons loops = offset(obj_cvx_hull.second, object_skirt_distance, ClipperLib::jtRound, float(scale_(0.1)));
                     Geometry::simplify_polygons(loops, scale_(0.05), &loops);
                     if (loops.empty())

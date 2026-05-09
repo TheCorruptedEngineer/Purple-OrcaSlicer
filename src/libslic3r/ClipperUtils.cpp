@@ -277,7 +277,7 @@ static ClipperLib::Paths raw_offset(PathsProvider &&paths, float offset, Clipper
     co.ShortestEdgeLength = std::abs(offset * ClipperOffsetShortestEdgeFactor);
     for (const ClipperLib::Path &path : paths) {
         co.Clear();
-        // Execute reorients the contours so that the outer most contour has a positive area. Thus the output
+        // Execute reorients the contours so that the outermost contour has a positive area. Thus the output
         // contours will be CCW oriented even though the input paths are CW oriented.
         // Offset is applied after contour reorientation, thus the signum of the offset value is reversed.
         co.AddPath(path, joinType, endType);
@@ -469,7 +469,7 @@ static int offset_expolygon_inner(const Slic3r::ExPolygon &expoly, const float d
                 co.ShortestEdgeLength = std::abs(delta * ClipperOffsetShortestEdgeFactor);
                 co.AddPath(hole.points, joinType, ClipperLib::etClosedPolygon);
                 ClipperLib::Paths out2;
-                // Execute reorients the contours so that the outer most contour has a positive area. Thus the output
+                // Execute reorients the contours so that the outermost contour has a positive area. Thus the output
                 // contours will be CCW oriented even though the input paths are CW oriented.
                 // Offset is applied after contour reorientation, thus the signum of the offset value is reversed.
                 co.Execute(out2, - delta);

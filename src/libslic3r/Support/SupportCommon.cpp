@@ -522,7 +522,7 @@ void tree_supports_generate_paths(
                     co.ShortestEdgeLength = double(delta * 0.005);
                     co.AddPath(hole.points, joinType, ClipperLib::etClosedPolygon);
                     ClipperLib::Paths out2;
-                    // Execute reorients the contours so that the outer most contour has a positive area. Thus the output
+                    // Execute reorients the contours so that the outermost contour has a positive area. Thus the output
                     // contours will be CCW oriented even though the input paths are CW oriented.
                     // Offset is applied after contour reorientation, thus the signum of the offset value is reversed.
                     co.Execute(out2, delta);
