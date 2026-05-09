@@ -40,14 +40,22 @@ jobs:
 
             const versionSection = body.match(/###\s*OrcaSlicer Build Number\s+([\s\S]*?)(?=###|$)/i);
             const versionText = (versionSection ? versionSection[1] : '').trim();
-            const cleanedVersionText = versionText.replace(/`/g, '').trim();
-            const markdownLinkMatch = cleanedVersionText.match(/^\[\s*([0-9a-f]{7})\s*\]\(.*\)$/i);
-            const htmlLinkMatch = cleanedVersionText.match(/^<a\b[^>]*>\s*([0-9a-f]{7})\s*<\/a>$/i);
-            const hasShortShaOnly =
-              /^[0-9a-f]{7}$/i.test(cleanedVersionText) ||
-              !!markdownLinkMatch ||
-              !!htmlLinkMatch;
-            const hasVersion = hasShortShaOnly;
+            function normalizeBuildShaInput(text) {
+              let normalized = text.replace(/`/g, '').trim();
+
+              const markdownLinkMatch = normalized.match(/^\[\s*([0-9a-f]{7})\s*\]\([^)]*\)$/i);
+              if (markdownLinkMatch) {
+                return markdownLinkMatch[1];
+              }
+
+              // GitHub can autolink commit hashes with nested HTML such as
+              // <a ...><tt>864e28d</tt></a>. Keep the visible text only.
+              normalized = normalized.replace(/<[^>]*>/g, '').trim();
+
+              return normalized;
+            }
+            const normalizedVersionText = normalizeBuildShaInput(versionText);
+            const hasVersion = /^[0-9a-f]{7}$/i.test(normalizedVersionText);
 
             const needsVersionLabel = { name: 'needs-version', color: 'd73a4a', description: 'Missing OrcaSlicer Build SHA7 (short hash)' };
 
