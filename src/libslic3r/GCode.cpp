@@ -6270,6 +6270,9 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
         description += " (bridge)";
 
     const ExtrusionPathSloped* sloped = dynamic_cast<const ExtrusionPathSloped*>(&path);
+    const bool should_apply_staggered_offset = sloped == nullptr && !path.z_contoured && !is_approx(path.z_offset, 0.0f);
+    // path.z_offset is expressed in layer-height units.
+    const double target_z = should_apply_staggered_offset ? m_nominal_z + path.z_offset * path.height : m_nominal_z;
 
     const auto get_sloped_z = [&sloped, this](double z_ratio) {
         const auto height = sloped->height;
@@ -6279,8 +6282,8 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
 
     bool slope_need_z_travel = false;
     if (sloped != nullptr && !sloped->is_flat()) {
-        auto target_z = get_sloped_z(sloped->slope_begin.z_ratio);
-        slope_need_z_travel = m_writer.will_move_z(target_z);
+        auto slope_target_z = get_sloped_z(sloped->slope_begin.z_ratio);
+        slope_need_z_travel = m_writer.will_move_z(slope_target_z);
     }
     // Move to first point of extrusion path
     // path is 2D. But in slope lift case, lift z is done in travel_to function.
@@ -6295,15 +6298,17 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
             z =  get_sloped_z(sloped->slope_begin.z_ratio);
         } else if (path.z_contoured && !path.polyline.lines().empty()) {
             z = unscale_(path.polyline.lines().begin()->a.z()) + m_nominal_z;
+        } else if (should_apply_staggered_offset) {
+            z = target_z;
         }
 
         gcode += this->travel_to(first_point, path.role(), "move to first " + description + " point", z);
 
-        // Orca: ensure Z matches planned layer height
+        // Orca: ensure Z matches planned path Z
         if (!slope_need_z_travel && (_last_pos_undefined || need_layer_lift_z_sync)) {
             const std::string z_sync_comment = _last_pos_undefined ?
-                "ensure Z matches planned layer height" : ""; // no comment for normal layer-Z lift
-            gcode += this->writer().travel_to_z(m_nominal_z, z_sync_comment, true);
+                "ensure Z matches planned path Z" : ""; // no comment for normal layer-Z lift
+            gcode += this->writer().travel_to_z(target_z, z_sync_comment, true);
         }
         m_need_change_layer_lift_z = false;
     }
@@ -6317,8 +6322,8 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
     }
     if (!path.z_contoured && sloped == nullptr) {
         double current_z = m_writer.get_position().z();
-        if (GCodeFormatter::quantize_xyzf(current_z) != GCodeFormatter::quantize_xyzf(m_nominal_z)) {
-            gcode += this->writer().travel_to_z(m_nominal_z, "reset Z after contouring", true);
+        if (GCodeFormatter::quantize_xyzf(current_z) != GCodeFormatter::quantize_xyzf(target_z)) {
+            gcode += this->writer().travel_to_z(target_z, should_apply_staggered_offset ? "set Z for staggered perimeter" : "reset Z after path-specific offset", true);
         }
     }
 
