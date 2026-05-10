@@ -6445,7 +6445,7 @@ void PrintConfigDef::init_fff_params()
     def          = this->add("staggered_perimeters", coBool);
     def->label   = L("Stagger perimeters");
     def->category = L("Strength");
-    def->tooltip = L("This is an experminetal feature that allows you to print staggered perimeters for better layer adhesion and strength.");
+    def->tooltip = L("This is an experimental feature that allows you to print staggered perimeters for better layer adhesion and strength.");
     def->mode    = comAdvanced;
     def->set_default_value(new ConfigOptionBool(false));
 
