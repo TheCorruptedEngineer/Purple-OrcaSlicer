@@ -23,7 +23,7 @@ body:
           required: true
         - label: I understand this is an unofficial fork and will not report this issue to the official OrcaSlicer
           required: true
-        - label: I included the short Build SHA7 from Help > About Orca Slicer into the version field (e.g., abc1234)
+        - label: I included the short Build SHA (7 or 8 chars) from Help > About Orca Slicer into the version field (e.g., abc1234)
           required: true
 
   - type: textarea
@@ -70,7 +70,7 @@ body:
     id: version
     attributes:
       label: OrcaSlicer Build Number
-      description: Paste only the short Build SHA7 from Help > About Orca Slicer (e.g., `abc1234`).
+      description: Paste only the short Build SHA (7 or 8 chars) from Help > About Orca Slicer (e.g., `abc1234` or `abc12345`).
       placeholder: "abc1234"
     validations:
       required: true

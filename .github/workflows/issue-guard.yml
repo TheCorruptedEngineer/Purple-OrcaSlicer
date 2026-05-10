@@ -43,7 +43,7 @@ jobs:
             function normalizeBuildShaInput(text) {
               let normalized = text.replace(/`/g, '').trim();
 
-              const markdownLinkMatch = normalized.match(/^\[\s*([0-9a-f]{7})\s*\]\([^)]*\)$/i);
+              const markdownLinkMatch = normalized.match(/^\[\s*([0-9a-f]{7,8})\s*\]\([^)]*\)$/i);
               if (markdownLinkMatch) {
                 return markdownLinkMatch[1];
               }
@@ -55,9 +55,9 @@ jobs:
               return normalized;
             }
             const normalizedVersionText = normalizeBuildShaInput(versionText);
-            const hasVersion = /^[0-9a-f]{7}$/i.test(normalizedVersionText);
+            const hasVersion = /^[0-9a-f]{7,8}$/i.test(normalizedVersionText);
 
-            const needsVersionLabel = { name: 'needs-version', color: 'd73a4a', description: 'Missing OrcaSlicer Build SHA7 (short hash)' };
+            const needsVersionLabel = { name: 'needs-version', color: 'd73a4a', description: 'Missing OrcaSlicer Build SHA (7 or 8 char short hash)' };
 
             const featureAreas = [
               { match: /ui\/ux/i, label: 'feature: ui/ux', color: 'c2e0c6', description: 'Feature area: UI/UX' },
@@ -102,9 +102,9 @@ jobs:
             }
 
             async function ensureSingleComment() {
-              const warningText = 'please paste ONLY the short Build SHA7 from Help > About Orca Slicer in the format `abc1234` (exactly 7 hex chars, no other text).';
+              const warningText = 'please paste ONLY the short Build SHA from Help > About Orca Slicer in the format `abc1234` (7 or 8 hex chars, no other text).';
               const comments = await github.paginate(github.rest.issues.listComments, { owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number, per_page: 50 });
-              const alreadyWarned = comments.some(c => c.user && c.user.login === 'github-actions[bot]' && c.body && c.body.includes('Build SHA7'));
+              const alreadyWarned = comments.some(c => c.user && c.user.login === 'github-actions[bot]' && c.body && c.body.includes('short Build SHA'));
               if (!alreadyWarned) {
                 await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number, body: `Hi @${issue.user.login}, ${warningText}\n\nPlease edit the issue to include it; once updated, the \`${needsVersionLabel.name}\` label will be removed automatically.` });
               }
@@ -115,7 +115,7 @@ jobs:
               for (const c of comments) {
                 const fromBot = c.user && c.user.login === 'github-actions[bot]';
                 if (!fromBot) continue;
-                if (removeVersionWarnings && c.body && c.body.includes('short Build SHA7')) {
+                if (removeVersionWarnings && c.body && c.body.includes('short Build SHA')) {
                   try {
                     await github.rest.issues.deleteComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: c.id });
                   } catch (error) {
