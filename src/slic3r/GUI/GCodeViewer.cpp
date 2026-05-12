@@ -166,7 +166,7 @@ int GCodeViewer::SequentialView::ActualSpeedImguiWidget::plot(const char* label,
         const float y0 = y_range.first;
 
         const ImU32 grid_main_color = ImGui::GetColorU32(ImVec4(0.5f, 0.5f, 0.5f, 0.5f));
-        const ImU32 grid_secondary_color = ImGui::GetColorU32(ImVec4(0.0f, 150.f / 255.0f, 136.0f / 255.f, 0.5f)); // ORCA color with opacity
+        const ImU32 grid_secondary_color = ImGui::GetColorU32(ImVec4(177.f/255.f, 60.f/255.f, 255.f/255.f, 0.5f)); // ORCA color with opacity
 
         // horizontal levels
         for (const auto& [level, color] : levels) {
@@ -186,7 +186,7 @@ int GCodeViewer::SequentialView::ActualSpeedImguiWidget::plot(const char* label,
 
         // profiile
         const ImU32 col_base = ImGui::GetColorU32(ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
-        const ImU32 col_hovered = ImGui::GetColorU32(ImVec4(0.0f, 150.f / 255.0f, 136.0f / 255.f, 1.0f)); // ORCA color
+        const ImU32 col_hovered = ImGui::GetColorU32(ImVec4(177.f/255.f, 60.f/255.f, 255.f/255.f, 1.0f)); // ORCA color
         for (int n = 0; n < values_count - 1; ++n) {
             const ImVec2 tp1(ImSaturate((data[n].pos - x0) * inv_scale_x), 1.0f - ImSaturate((data[n].speed - y0) * inv_scale_y));
             const ImVec2 tp2(ImSaturate((data[n + 1].pos - x0) * inv_scale_x), 1.0f - ImSaturate((data[n + 1].speed - y0) * inv_scale_y));
@@ -388,7 +388,7 @@ void GCodeViewer::SequentialView::Marker::render_position_window(const libvgcode
                     ImGuiWrapper::text(text);
                 });
                 append_table_row(_u8L("Acceleration"), [&vertex, &buff]() {
-                    sprintf(buff, ("%.0f " + _u8L("mm/s²")).c_str(), vertex.acceleration);
+                    sprintf(buff, ("%.0f " + _u8L("mm/sÂ²")).c_str(), vertex.acceleration);
                     const std::string text = std::string(buff);
                     ImGuiWrapper::text(text);
                 });
@@ -400,7 +400,7 @@ void GCodeViewer::SequentialView::Marker::render_position_window(const libvgcode
                   append_table_row(_u8L("Flow rate"), [&vertex, &buff, NA_TXT]() { // ORCA use "Flow rate" instead "Volumetric flow Rate" to make window more compact
                     std::string text;
                     if (vertex.is_extrusion()) {
-                        sprintf(buff, ("%.3f " + _u8L("mm³/s")).c_str(), vertex.volumetric_rate());
+                        sprintf(buff, ("%.3f " + _u8L("mmÂ³/s")).c_str(), vertex.volumetric_rate());
                         text = std::string(buff);
                     }
                     else
@@ -413,7 +413,7 @@ void GCodeViewer::SequentialView::Marker::render_position_window(const libvgcode
                     ImGuiWrapper::text(text);
                 });
                 append_table_row(_u8L("Temperature"), [&vertex, &buff]() {
-                    sprintf(buff, ("%.0f " + _u8L("°C")).c_str(), vertex.temperature);
+                    sprintf(buff, ("%.0f " + _u8L("Â°C")).c_str(), vertex.temperature);
                     ImGuiWrapper::text(std::string(buff));
                 });
 // ORCA: Add Pressure Advance visualization support
@@ -477,7 +477,7 @@ void GCodeViewer::SequentialView::Marker::render_position_window(const libvgcode
                             //if (highlight && counter == hover_id)
                             //    ImGui::SetScrollHereY();
                             ImGui::TableNextRow();
-                            const ImU32 row_bg_color = ImGui::GetColorU32(item.internal ? ImVec4(0.0f, 150.f / 255.0f, 136.0f / 255.f, 0.15f) : ImVec4(0.2f, 0.2f, 0.2f, 0.25f)); // ORCA
+                            const ImU32 row_bg_color = ImGui::GetColorU32(item.internal ? ImVec4(177.f/255.f, 60.f/255.f, 255.f/255.f, 0.15f) : ImVec4(0.2f, 0.2f, 0.2f, 0.25f)); // ORCA
                             ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, row_bg_color);
                             ImGui::TableSetColumnIndex(0);
                             sprintf(buff, "%.3f", item.pos);
@@ -2760,7 +2760,7 @@ void GCodeViewer::render_legend_color_arr_recommen(float window_padding)
     auto link_text = [&](const std::string &label) {
         ImVec2 wiki_part_size = ImGui::CalcTextSize(label.c_str());
 
-        ImColor HyperColor = ImColor(0, 150, 136, 255).Value;
+        ImColor HyperColor = ImColor(177, 60, 255, 255).Value;
         ImGui::PushStyleColor(ImGuiCol_Text, HyperColor.Value);
         imgui.text(label.c_str());
         ImGui::PopStyleColor();
@@ -2786,7 +2786,7 @@ void GCodeViewer::render_legend_color_arr_recommen(float window_padding)
     auto link_text_set_to_optional = [&](const std::string &label) {
         ImVec2 wiki_part_size = ImGui::CalcTextSize(label.c_str());
 
-        ImColor HyperColor = ImColor(0, 150, 136, 255).Value;
+        ImColor HyperColor = ImColor(177, 60, 255, 255).Value;
         ImGui::PushStyleColor(ImGuiCol_Text, HyperColor.Value);
         imgui.text(label.c_str());
         ImGui::PopStyleColor();
@@ -2813,7 +2813,7 @@ void GCodeViewer::render_legend_color_arr_recommen(float window_padding)
 
     auto link_filament_group_wiki = [&](const std::string& label) {
         ImVec2 wiki_part_size = ImGui::CalcTextSize(label.c_str());
-        ImColor HyperColor = ImColor(0, 150, 136, 255); // ORCA match color
+        ImColor HyperColor = ImColor(177, 60, 255, 255); // ORCA match color
         ImGui::PushStyleColor(ImGuiCol_Text, HyperColor.Value);
         imgui.text(label.c_str());
         ImGui::PopStyleColor();
@@ -3574,7 +3574,7 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
     }
     case libvgcode::EViewType::Acceleration:
     {
-        imgui.title(_u8L("Acceleration (mm/s²)"));
+        imgui.title(_u8L("Acceleration (mm/sÂ²)"));
         break;
     }
     case libvgcode::EViewType::Jerk:
@@ -3583,13 +3583,13 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         break;
     }
     case libvgcode::EViewType::FanSpeed:       { imgui.title(_u8L("Fan Speed (%)")); break; }
-    case libvgcode::EViewType::Temperature:    { imgui.title(_u8L("Temperature (°C)")); break; }
+    case libvgcode::EViewType::Temperature:    { imgui.title(_u8L("Temperature (Â°C)")); break; }
 // ORCA: Add Pressure Advance visualization support
     case libvgcode::EViewType::PressureAdvance:{ imgui.title(_u8L("Pressure Advance")); break; }
     case libvgcode::EViewType::VolumetricFlowRate:
-        { imgui.title(_u8L("Volumetric flow rate (mm³/s)")); break; }
+        { imgui.title(_u8L("Volumetric flow rate (mmÂ³/s)")); break; }
     case libvgcode::EViewType::ActualVolumetricFlowRate:
-        { imgui.title(_u8L("Actual volumetric flow rate (mm³/s)")); break; }
+        { imgui.title(_u8L("Actual volumetric flow rate (mmÂ³/s)")); break; }
     case libvgcode::EViewType::LayerTimeLinear:
         { imgui.title(_u8L("Layer Time")); break; }
     case libvgcode::EViewType::LayerTimeLogarithmic:

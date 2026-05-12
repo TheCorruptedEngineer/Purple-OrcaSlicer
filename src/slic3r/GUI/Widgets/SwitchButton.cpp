@@ -31,7 +31,7 @@ SwitchButton::SwitchButton(wxWindow* parent, wxWindowID id)
 	, m_off(this, "toggle_off", 16)
     , text_color(std::pair{0xfffffe, (int) StateColor::Checked}, std::pair{0x6B6B6B, (int) StateColor::Normal})
 	, track_color(0xD9D9D9)
-    , thumb_color(std::pair{0x009688, (int) StateColor::Checked}, std::pair{0xD9D9D9, (int) StateColor::Normal})
+    , thumb_color(std::pair{0xB13CFF, (int) StateColor::Checked}, std::pair{0xD9D9D9, (int) StateColor::Normal})
 {
 	SetBackgroundColour(StaticBox::GetParentBackgroundColor(parent));
 	Bind(wxEVT_TOGGLEBUTTON, [this](auto& e) { update(); e.Skip(); });
@@ -297,11 +297,11 @@ void ModeSwitchButton::doRender(wxDC& dc)
     const wxColour track_fill = disabled ? wxColour(0xD0, 0xD0, 0xD4) :
                                m_pressed ? wxColour(0x5A, 0x5D, 0x64) : wxColour(0x66, 0x69, 0x70);
     const wxColour track_border = disabled ? wxColour(0xDD, 0xDD, 0xE0) :
-                                 focused ? wxColour("#009688") :
+                                 focused ? wxColour("#B13CFF") :
                                  hovered ? wxColour(0x7A, 0x7D, 0x84) : wxColour(0x75, 0x78, 0x7F);
     const wxColour active_fill = disabled ? wxColour(0x9E, 0xBE, 0xB9) :
-                                m_pressed ? wxColour(0x00877B) : wxColour("#009688");
-    const wxColour active_dot = disabled ? wxColour(0xEC, 0xF4, 0xF2) : wxColour(0xB7, 0xEB, 0xE3);
+                                m_pressed ? wxColour(0x8E2FBF) : wxColour("#B13CFF");
+    const wxColour active_dot = disabled ? wxColour(0xE5, 0xD6, 0xFF) : wxColour(0xD0, 0xAA, 0xFF);
     const wxColour inactive_dot = disabled ? wxColour(0xF2, 0xF2, 0xF4) : wxColour(0xB5, 0xB7, 0xBD);
     const wxColour thumb_fill = disabled ? wxColour(0xFA, 0xFA, 0xFA) : *wxWHITE;
     const wxColour thumb_border = disabled ? wxColour(0xE7, 0xE7, 0xEA) : wxColour(0xDD, 0xDF, 0xE3);
@@ -399,7 +399,7 @@ MultiSwitchButton::MultiSwitchButton(wxWindow *parent, wxWindowID id, const wxPo
     : StaticBox(parent, id, pos, size, style)
     , m_bg_color(StateColor(
           std::make_pair(0xE8E8E8, (int) StateColor::NotChecked),
-          std::make_pair(0x009688, (int) StateColor::Normal)))
+          std::make_pair(0xB13CFF, (int) StateColor::Normal)))
     , m_text_color(StateColor(
           std::make_pair(0x6B6B6B, (int) StateColor::NotChecked),
           std::make_pair(0xFFFFFE, (int) StateColor::Normal)))
@@ -671,7 +671,7 @@ void SwitchBoard::doRender(wxDC &dc)
 
 	/*left*/
     if (switch_left) {
-        is_enable ? dc.SetBrush(wxBrush(wxColour(0, 150, 136))) : dc.SetBrush(disable_color);
+        is_enable ? dc.SetBrush(wxBrush(wxColour(177, 60, 255))) : dc.SetBrush(disable_color);
         dc.DrawRoundedRectangle(0, 0, GetSize().x / 2, GetSize().y, 8);
 	}
 
@@ -689,7 +689,7 @@ void SwitchBoard::doRender(wxDC &dc)
 
 	/*right*/
     if (switch_right) {
-        if (is_enable) {dc.SetBrush(wxBrush(wxColour(0, 150, 136)));
+        if (is_enable) {dc.SetBrush(wxBrush(wxColour(177, 60, 255)));
         } else {dc.SetBrush(disable_color);}
         dc.DrawRoundedRectangle(GetSize().x / 2, 0, GetSize().x / 2, GetSize().y, 8);
 	}

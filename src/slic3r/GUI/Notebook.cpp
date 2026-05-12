@@ -69,7 +69,7 @@ void ButtonsListCtrl::OnPaint(wxPaintEvent&)
     if (m_selection < 0 || m_selection >= (int)m_pageButtons.size())
         return;
 
-    wxColour selected_btn_bg("#1F8EEA");
+    wxColour selected_btn_bg("#B13CFF");
     wxColour default_btn_bg("#3B4446"); // Gradient #414B4E
     const wxColour& btn_marker_color = Slic3r::GUI::wxGetApp().get_color_hovered_btn_label();
 
@@ -123,7 +123,7 @@ void ButtonsListCtrl::SetSelection(int sel)
     if (m_selection == sel)
         return;
     // BBS: change button color
-    wxColour selected_btn_bg("#009688");    // Gradient #009688
+    wxColour selected_btn_bg("#B13CFF");    // Gradient #B13CFF
     if (m_selection >= 0) {
         StateColor bg_color = StateColor(
         std::pair{wxColour(107, 107, 107), (int) StateColor::Hovered},
@@ -138,8 +138,8 @@ void ButtonsListCtrl::SetSelection(int sel)
     m_selection = sel;
 
     StateColor bg_color = StateColor(
-        std::pair{wxColour(0, 150, 136), (int) StateColor::Hovered},
-        std::pair{wxColour(0,150, 136), (int) StateColor::Normal});
+        std::pair{wxColour(177, 60, 255), (int) StateColor::Hovered},
+        std::pair{wxColour(177, 60, 255), (int) StateColor::Normal});
     m_pageButtons[m_selection]->SetBackgroundColor(bg_color);
 
     StateColor text_color = StateColor(

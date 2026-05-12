@@ -134,7 +134,7 @@ private:
     void OnPaint(wxPaintEvent&)
     {
         wxPaintDC dc(this);
-        // Transparent — draw nothing
+        // Transparent â€” draw nothing
     }
 
     GdkWindowEdge get_gdk_edge(const wxPoint& pos) const
@@ -282,7 +282,7 @@ wxDEFINE_EVENT(EVT_SYNC_CLOUD_PRESET,     SimpleEvent);
 #ifdef __APPLE__
 static const wxString ctrl = ("Ctrl+");
 // FIXME: maybe should be using GUI::shortkey_ctrl_prefix() or equivalent?
-static const std::string ctrl_t = u8"\u2318+"; // "⌘" (Mac Command)
+static const std::string ctrl_t = u8"\u2318+"; // "âŒ˜" (Mac Command)
 #else
 static const wxString ctrl = _L("Ctrl+");
 // FIXME: maybe should be using GUI::shortkey_ctrl_prefix() or equivalent?
@@ -1106,7 +1106,7 @@ void MainFrame::shutdown()
 {
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << "MainFrame::shutdown enter";
 #ifdef __WXGTK__
-    // Edge panels are child windows — wxWidgets destroys them automatically.
+    // Edge panels are child windows â€” wxWidgets destroys them automatically.
     m_edge_bottom = nullptr;
     m_edge_left   = nullptr;
     m_edge_right  = nullptr;
@@ -2328,7 +2328,7 @@ void MainFrame::update_side_button_style()
     StateColor m_btn_bg_enable = StateColor(
         std::pair<wxColour, int>(wxColour(0, 137, 123), StateColor::Pressed),
         std::pair<wxColour, int>(wxColour(48, 221, 112), StateColor::Hovered),
-        std::pair<wxColour, int>(wxColour(0, 150, 136), StateColor::Normal)
+        std::pair<wxColour, int>(wxColour(177, 60, 255), StateColor::Normal)
     );
 
     // m_publish_btn->SetMinSize(wxSize(FromDIP(125), FromDIP(24)));

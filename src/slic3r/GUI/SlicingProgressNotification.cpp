@@ -329,7 +329,7 @@ void Slic3r::GUI::NotificationManager::SlicingProgressNotification::render_text(
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(.0f, .0f, .0f, .0f));
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(.0f, .0f, .0f, .0f));
 		push_style_color(ImGuiCol_Text, ImVec4(1.f, 1.f, 1.f, 1.f), m_state == EState::FadingOut, m_current_fade_opacity);
-		push_style_color(ImGuiCol_TextSelectedBg, ImVec4(0, .75f, .75f, 1.f), m_state == EState::FadingOut, m_current_fade_opacity);
+		push_style_color(ImGuiCol_TextSelectedBg, ImVec4(177.f/255.f, 60.f/255.f, 255.f/255.f, 1.f), m_state == EState::FadingOut, m_current_fade_opacity);
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(.0f, .0f, .0f, .0f));
 
 		ImGui::SetCursorScreenPos(pos);
@@ -370,7 +370,7 @@ void Slic3r::GUI::NotificationManager::SlicingProgressNotification::render_bar(c
 
 	ImGuiWrapper& imgui = *wxGetApp().imgui();
 
-	ImColor progress_color = ImColor(0, 150, 136, (int)(255 * m_current_fade_opacity));
+	ImColor progress_color = ImColor(177, 60, 255, (int)(255 * m_current_fade_opacity));
 	ImColor bg_color = ImColor(217, 217, 217, (int)(255 * m_current_fade_opacity));
 
 	ImVec2 lineStart = pos;
@@ -404,7 +404,7 @@ void NotificationManager::SlicingProgressNotification::render_show_dailytips(con
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(.0f, .0f, .0f, .0f));
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(.0f, .0f, .0f, .0f));
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(.0f, .0f, .0f, .0f));
-	ImGui::PushStyleColor(ImGuiCol_Text, ImColor(31, 142, 234).Value);
+	ImGui::PushStyleColor(ImGuiCol_Text, ImColor(177, 60, 255).Value);
 
 	ImGui::SetCursorScreenPos(pos);
 	std::wstring button_text;
@@ -419,7 +419,7 @@ void NotificationManager::SlicingProgressNotification::render_show_dailytips(con
 		lineEnd.y -= 2;
 		ImVec2 lineStart = lineEnd;
 		lineStart.x = ImGui::GetItemRectMin().x;
-		ImGui::GetWindowDrawList()->AddLine(lineStart, lineEnd, ImColor(31, 142, 234));
+		ImGui::GetWindowDrawList()->AddLine(lineStart, lineEnd, ImColor(177, 60, 255));
 
 		if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			on_show_dailytips();
@@ -441,7 +441,7 @@ void Slic3r::GUI::NotificationManager::SlicingProgressNotification::render_cance
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(.0f, .0f, .0f, .0f));
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(.0f, .0f, .0f, .0f));
 		push_style_color(ImGuiCol_Text, ImVec4(1.f, 1.f, 1.f, 1.f), m_state == EState::FadingOut, m_current_fade_opacity);
-		push_style_color(ImGuiCol_TextSelectedBg, ImVec4(0, .75f, .75f, 1.f), m_state == EState::FadingOut, m_current_fade_opacity);
+		push_style_color(ImGuiCol_TextSelectedBg, ImVec4(177.f/255.f, 60.f/255.f, 255.f/255.f, 1.f), m_state == EState::FadingOut, m_current_fade_opacity);
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(.0f, .0f, .0f, .0f));
 
 		ImVec2 button_size = size;
@@ -470,7 +470,7 @@ void NotificationManager::SlicingProgressNotification::render_close_button(const
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(.0f, .0f, .0f, .0f));
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(.0f, .0f, .0f, .0f));
 		push_style_color(ImGuiCol_Text, ImVec4(1.f, 1.f, 1.f, 1.f), m_state == EState::FadingOut, m_current_fade_opacity);
-		push_style_color(ImGuiCol_TextSelectedBg, ImVec4(0, .75f, .75f, 1.f), m_state == EState::FadingOut, m_current_fade_opacity);
+		push_style_color(ImGuiCol_TextSelectedBg, ImVec4(177.f/255.f, 60.f/255.f, 255.f/255.f, 1.f), m_state == EState::FadingOut, m_current_fade_opacity);
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(.0f, .0f, .0f, .0f));
 
 		ImVec2 button_size = size;

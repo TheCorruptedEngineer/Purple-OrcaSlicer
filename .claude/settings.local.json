@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd /c \"C:\\\\ProgramData\\\\Microsoft\\\\Windows\\\\Start Menu\\\\Programs\\\\Visual Studio 2026\\\\Visual Studio Tools\\\\x64_x86 Cross Tools Command Prompt for VS.bat\")",
+      "Bash(cmake --build build --config Release --target ALL_BUILD -- -m)",
+      "Bash(gh repo *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  }
+}

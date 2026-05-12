@@ -47,7 +47,7 @@ html, body {
 .LinkBtn
 {
 	font-size:12px;
-	color: #00ffea;	
+	color: #B13CFF;
 	cursor: pointer;
 }
 
@@ -230,7 +230,7 @@ body
 
 #DownloadBtn
 {
-	color:#00ffd9;
+	color:#B13CFF;
 }
 
 
@@ -289,12 +289,12 @@ body
 
 .BtnItem:hover
 {
-	background-color: #BFE1DE; /*ORCA color with %25 opacity*/
+	background-color: #BFDCFF; /*Purple color with %25 opacity*/
 }
 
 .BtnItemSelected
 {
-	background-color: #BFE1DE; /*ORCA color with %25 opacity*/
+	background-color: #BFDCFF; /*Purple color with %25 opacity*/
 }
 
 .BtnIcon
@@ -395,8 +395,8 @@ body
 
 .MenuItem:hover
 {
-	border-color: #009688;		/*ORCA color*/
-	background-color: #E5F0EE; /*ORCA color with %25 opacity*/
+	border-color: #B13CFF;		/*Purple color*/
+	background-color: #E5D6FF; /*Purple color with %25 opacity*/
 }
 
 .MenuIcon
@@ -408,6 +408,13 @@ body
 {
 	width:56px;
 	height: 56px;
+}
+
+/* New Project and Open Project icons - change blue to purple #B13CFF */
+.MenuIcon img[src*="i4"],
+.MenuIcon img[src*="i5"]
+{
+	filter: grayscale(100%) sepia(100%) hue-rotate(240deg) saturate(600%) brightness(0.8) !important;
 }
 
 .MenuDesc
@@ -573,7 +580,7 @@ body
 .CT_Item:hover
 {
 	cursor: pointer;
-	background-color:#009688; /*ORCA color*/
+	background-color:#B13CFF; /*Purple color*/
 	border-radius: 4px;
 	color: #fff;
 }
@@ -809,7 +816,7 @@ body
 #HotModel_RIGHT_Title:hover
 {
 	cursor: pointer;	
-	color:#009688;	
+	color:#B13CFF;	
 }
 
 .HotModelPiece
@@ -879,4 +886,11 @@ body
 	opacity: 1!important;
 	cursor: pointer!important;
 	pointer-events: auto!important;
+}
+
+/* Force New Project and Open Project icons to purple #B13CFF */
+body .MenuIcon img[src*="i4"],
+body .MenuIcon img[src*="i5"]
+{
+	filter: sepia(100%) hue-rotate(235deg) saturate(1000%) brightness(0.7) !important;
 }
