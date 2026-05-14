@@ -1,8 +1,9 @@
 <div align="center">
 
-# **THIS IS AN UNOFFICIAL MODIFIED FORK SEE <https://github.com/OrcaSlicer/OrcaSlicer> FOR THE OFFICIAL VERSION**
+# **Purple OrcaSlicer**
+## Unofficial Modified Fork with Purple Accent Theme
 
-# DO NOT REPORT BUGS FOUND HERE TO THE OFFICIAL VERSION
+See <https://github.com/OrcaSlicer/OrcaSlicer> for the official version.
 
 
 <table border="2" style="border-color: #ffa500; background-color:rgb(232, 220, 180); color: #856404;">
@@ -31,7 +32,7 @@ The wiki below aims to provide a detailed explanation of the slicer settings, in
 
 Please note that the wiki is a work in progress. We appreciate your patience as we continue to develop and improve it!
 
-- **[Access the unofficial wiki here](https://github.com/NanashiTheNameless/OrcaSlicer/wiki)**
+- **[Access the wiki here](https://github.com/OrcaSlicer/OrcaSlicer/wiki)**
 
 # Download
 
@@ -43,13 +44,13 @@ This fork **does not publish stable builds**, for stability and sanity **go to t
 
 ## Nightly Builds
 
-**[Download the Latest Nightly Build](https://github.com/NanashiTheNameless/OrcaSlicer/releases/tag/Nightly-Rolling)**
+**[Download the Latest Nightly Build](https://github.com/TheCorruptedEngineer/Purple-OrcaSlicer/releases/tag/V2.4.0-Kurisu)**
 
 # How to install
 
 ## Windows
 
-Download the **Windows Installer exe** for your preferred version from the [releases page]([https://github.com/NanashiTheNameless/OrcaSlicer/releases/latest](https://github.com/NanashiTheNameless/OrcaSlicer/releases/tag/Nightly-Rolling)).
+Download the **Windows Installer exe** for your preferred version from the [releases page](https://github.com/TheCorruptedEngineer/Purple-OrcaSlicer/releases/tag/V2.4.0-Kurisu)).
 
  - *For convenience there is also a portable build available.*
     <details>
@@ -86,9 +87,9 @@ Download the **Windows Installer exe** for your preferred version from the [rele
 ## Linux         
 
 ### Flathub (Recommended)
-This OrcaSlicer fork is **NOT** available through FlatHub!
+This OrcaSlicer fork is **NOT** available through Flathub!
 
-<https://github.com/NanashiTheNameless/OrcaSlicer/releases/tag/Nightly-Rolling>
+https://github.com/TheCorruptedEngineer/Purple-OrcaSlicer/releases/tag/V2.4.0-Kurisu>
 
 Install from the command line:
 
