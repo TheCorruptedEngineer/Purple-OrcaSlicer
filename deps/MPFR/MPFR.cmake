@@ -28,6 +28,26 @@ else ()
     # prefer a github "in-house" release to prevent supply chain annoyances.
     # mpfr.org occasionally presents a cert chain missing an intermediate in older base images.
     # ftp.gnu.org has a broadly trusted chain and acts as a reliable fallback.
+    # mpfr release tarballs ship a pre-generated ./configure, so we can build
+    # without autotools. (GitHub macOS runners used by the universal-combine job
+    # may not have autoreconf installed.)
+    set(_mpfr_configure_cmd
+        env "CC=${CMAKE_C_COMPILER}" "CXX=${CMAKE_CXX_COMPILER}" "CFLAGS=${_gmp_ccflags}" "CXXFLAGS=${_gmp_ccflags}" "LDFLAGS=${CMAKE_EXE_LINKER_FLAGS}"
+            ./configure ${_cross_compile_arg} --prefix=${DESTDIR} --enable-shared=no --enable-static=yes --with-gmp=${DESTDIR} ${_gmp_build_tgt}
+    )
+
+    # Extraction can leave the shipped configure/aclocal.m4/Makefile.in files
+    # with timestamps older than their Makefile.am/configure.ac sources, which
+    # makes `make` re-run autoconf/automake/aclocal. CI runners don't have the
+    # exact automake version the tarball was generated with (e.g.
+    # automake-1.17), so that regeneration fails. `make -o Makefile.in` only
+    # covers the top-level Makefile.in (make doesn't propagate -o to the
+    # per-subdir sub-makes for doc/src/tests/tune), so touch every generated
+    # autotools file everywhere instead, which covers all of them at once.
+    set(_mpfr_patch_cmd
+        find . "(" -name "configure" -o -name "aclocal.m4" -o -name "Makefile.in" -o -name "config.h.in" ")" -exec touch "{}" +
+    )
+
     ExternalProject_Add(dep_MPFR
         URL https://github.com/NanashiTheNameless/OrcaSlicer_deps/releases/download/mpfr-4.2.2.tar.bz2/mpfr-4.2.2.tar.bz2
             https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.bz2
@@ -35,8 +55,8 @@ else ()
         URL_HASH SHA256=9ad62c7dc910303cd384ff8f1f4767a655124980bb6d8650fe62c815a231bb7b
         DOWNLOAD_DIR ${DEP_DOWNLOAD_DIR}/MPFR
         BUILD_IN_SOURCE ON
-        CONFIGURE_COMMAND autoreconf -f -i &&
-                          env "CC=${CMAKE_C_COMPILER}" "CXX=${CMAKE_CXX_COMPILER}" "CFLAGS=${_gmp_ccflags}" "CXXFLAGS=${_gmp_ccflags}" "LDFLAGS=${CMAKE_EXE_LINKER_FLAGS}" ./configure ${_cross_compile_arg} --prefix=${DESTDIR} --enable-shared=no --enable-static=yes --with-gmp=${DESTDIR} ${_gmp_build_tgt}
+        PATCH_COMMAND ${_mpfr_patch_cmd}
+        CONFIGURE_COMMAND ${_mpfr_configure_cmd}
         BUILD_COMMAND make -j
         INSTALL_COMMAND make install
         DEPENDS dep_GMP

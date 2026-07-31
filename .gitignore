@@ -46,3 +46,8 @@ test.js
 internal_docs/
 *.flatpak
 /flatpak-repo/
+# Python bytecode
+__pycache__/
+*.pyc
+logs_*/
+logs_*.zip

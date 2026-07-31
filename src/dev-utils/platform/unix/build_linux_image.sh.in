@@ -8,6 +8,9 @@ set -e
 export ROOT=$(echo $ROOT | grep . || pwd)
 export NCORES=$(nproc --all)
 CONFIG=Release
+# Search depth for fallback binary discovery (depth counts path components from the search root:
+# build (1) / src (2) / Release (3) / orca-slicer (4)).
+MAX_BINARY_SEARCH_DEPTH=4
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
@@ -143,6 +146,7 @@ echo -n "[9/9] Generating Linux app..."
     fi
 
     APPDIR="package"
+    APPDIR_ABS="$(cd "$(dirname "${APPDIR}")" && pwd)/$(basename "${APPDIR}")"
     BIN_DIR="$APPDIR/bin"
     LIB_DIR="$APPDIR/lib"
     PRIVATE_LIB_DIR="$LIB_DIR/orca-runtime"
@@ -158,18 +162,99 @@ echo -n "[9/9] Generating Linux app..."
         mkdir -p "$GST_PLUGIN_DIR" "$GIO_MODULE_DIR" "$GDK_PIXBUF_DIR"
     fi
 
-    cp -Rf ../resources "$APPDIR/resources"
+    # Copy resources from repo root
+    cp -Rf "${REPO_ROOT}/resources" "$APPDIR/resources"
 
-    ORIGINAL_BINARY_LOCATION=""
-    if [ -f "src/${CONFIG}/@SLIC3R_APP_CMD@" ]; then
-        ORIGINAL_BINARY_LOCATION="$(realpath "src/${CONFIG}/@SLIC3R_APP_CMD@")"
-    elif [ -f "src/@SLIC3R_APP_CMD@" ]; then
-        ORIGINAL_BINARY_LOCATION="$(realpath "src/@SLIC3R_APP_CMD@")"
+    # Find the binary relative to the script's location (CMAKE_CURRENT_BINARY_DIR)
+    # The script is at ${CMAKE_CURRENT_BINARY_DIR}/build_linux_image.sh
+    # The binary is at ${CMAKE_CURRENT_BINARY_DIR}/Release/orca-slicer or ../../Release/orca-slicer
+    
+    # Prefer the value configured by CMake (ensures CI/AppImage scripts are consistent
+    # even if an environment variable SLIC3R_APP_CMD is set).
+    SLIC3R_APP_CMD_CONFIGURED="@SLIC3R_APP_CMD@"
+    if [[ -n "${SLIC3R_APP_CMD_CONFIGURED}" ]] && [[ "${SLIC3R_APP_CMD_CONFIGURED}" != "@SLIC3R_APP_CMD@" ]]; then
+        SLIC3R_APP_CMD="${SLIC3R_APP_CMD_CONFIGURED}"
     else
-        echo "Error: @SLIC3R_APP_CMD@ binary not found in any configuration directory"
+        # Fallback for cases where the script wasn't configured by CMake.
+        SLIC3R_APP_CMD="${SLIC3R_APP_CMD:-orca-slicer}"
+        if [[ "${SLIC3R_APP_CMD}" == "@SLIC3R_APP_CMD@" ]]; then
+            SLIC3R_APP_CMD="orca-slicer"
+        fi
+    fi
+    
+    ORIGINAL_BINARY_LOCATION=""
+    CONFIG_LOWER="$(printf '%s' "${CONFIG}" | tr '[:upper:]' '[:lower:]')"
+    CANDIDATE_BINARY_LOCATIONS=(
+        "${SCRIPT_DIR}/${CONFIG}/${SLIC3R_APP_CMD}"
+        "${SCRIPT_DIR}/../${CONFIG}/${SLIC3R_APP_CMD}"
+        "${SCRIPT_DIR}/${SLIC3R_APP_CMD}"
+        "${SCRIPT_DIR}/../${SLIC3R_APP_CMD}"
+    )
+    if [ "${CONFIG_LOWER}" != "${CONFIG}" ]; then
+        CANDIDATE_BINARY_LOCATIONS+=(
+            "${SCRIPT_DIR}/${CONFIG_LOWER}/${SLIC3R_APP_CMD}"
+            "${SCRIPT_DIR}/../${CONFIG_LOWER}/${SLIC3R_APP_CMD}"
+        )
+    fi
+
+    for candidate in "${CANDIDATE_BINARY_LOCATIONS[@]}"; do
+        if [ -f "${candidate}" ]; then
+            ORIGINAL_BINARY_LOCATION="${candidate}"
+            break
+        fi
+    done
+    if [ -z "${ORIGINAL_BINARY_LOCATION}" ]; then
+        # CMake generator/layout differences may place the binary outside the
+        # common config paths above; search a bounded depth in the likely build roots.
+        # Matching symlinks is intentional because some generators create executable shims.
+        for search_root in \
+            "${SCRIPT_DIR}/.." \
+            "${REPO_ROOT}" \
+            "${REPO_ROOT}/build" \
+            "${REPO_ROOT}/build/src" \
+            "${REPO_ROOT}/src"
+        do
+            if [ -d "${search_root}" ]; then
+                ORIGINAL_BINARY_LOCATION="$(find "${search_root}" -maxdepth "${MAX_BINARY_SEARCH_DEPTH}" -name "${SLIC3R_APP_CMD}" ! -path '*/CMakeFiles/*' -print -quit)"
+                if [ -n "${ORIGINAL_BINARY_LOCATION}" ]; then
+                    break
+                fi
+            fi
+        done
+    fi
+    if [ -z "${ORIGINAL_BINARY_LOCATION}" ]; then
+        echo "Error: ${SLIC3R_APP_CMD} binary not found in expected build directories"
         exit 1
     fi
-    cp -fl "${ORIGINAL_BINARY_LOCATION}" "$BIN_DIR/@SLIC3R_APP_CMD@"
+    ORIGINAL_BINARY_LOCATION="$(realpath "${ORIGINAL_BINARY_LOCATION}")"
+    cp -fl "${ORIGINAL_BINARY_LOCATION}" "$BIN_DIR/${SLIC3R_APP_CMD}"
+
+    # Bundle the embedded Python runtime (interpreter + stdlib) that CMake staged
+    # next to the binary. OrcaSlicer resolves PYTHONHOME at <resources_dir>/../lib/python,
+    # which is $APPDIR/lib/python (resources_dir is $APPDIR/resources). Staging it here,
+    # before the dependency-closure pass below, lets that pass also bundle the extension
+    # modules' shared libraries; libpython itself is found via rpath ($ORIGIN entries set
+    # in src/CMakeLists.txt and by the dep recipe). Without this the plugin system cannot start.
+    PYTHON_RUNTIME_SRC="$(dirname "${ORIGINAL_BINARY_LOCATION}")/python"
+    if [ -d "$PYTHON_RUNTIME_SRC" ]; then
+        echo "Bundling Python runtime from ${PYTHON_RUNTIME_SRC} ..."
+        copy_directory_if_present "$PYTHON_RUNTIME_SRC" "$LIB_DIR/python"
+    else
+        echo "Warning: bundled Python runtime not found at ${PYTHON_RUNTIME_SRC}; plugin support will be disabled in this AppImage."
+    fi
+
+    # Bundle the uv executable (CMake staged it next to the binary) so the plugin
+    # system can install Python package dependencies. bundled_uv_path() looks under
+    # <resources_dir>/tools/uv == $APPDIR/resources/tools/uv -- the same layout the
+    # install()-based packagers (Windows/Flatpak/FHS) use. Unlike the AppImage, those
+    # run `make install`; this build copies artifacts, so stage uv explicitly.
+    UV_RUNTIME_SRC="$(dirname "${ORIGINAL_BINARY_LOCATION}")/tools/uv"
+    if [ -d "$UV_RUNTIME_SRC" ]; then
+        echo "Bundling uv from ${UV_RUNTIME_SRC} ..."
+        copy_directory_if_present "$UV_RUNTIME_SRC" "$APPDIR/resources/tools/uv"
+    else
+        echo "Warning: bundled uv not found at ${UV_RUNTIME_SRC}; Python package installation will be unavailable in this AppImage."
+    fi
 
     if [ "$BUNDLE_DESKTOP_STACK" = "1" ]; then
         GSTREAMER_PLUGIN_SOURCE_DIR="$(find_pkg_config_dir pluginsdir gstreamer-1.0 || true)"
@@ -231,7 +316,7 @@ echo -n "[9/9] Generating Linux app..."
     mapfile -d '' BUNDLE_TARGETS < <(find "$BIN_DIR" "$LIB_DIR" "$LIBEXEC_DIR" -type f -print0 2>/dev/null)
     bundle_dependency_closure "$PRIVATE_LIB_DIR" "${BUNDLE_TARGETS[@]}"
 
-cat << EOF >"$LIBEXEC_DIR/@SLIC3R_APP_CMD@-env"
+cat << EOF >"$LIBEXEC_DIR/${SLIC3R_APP_CMD}-env"
 #!/bin/sh
 set -e
 SELF_DIR=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
@@ -350,9 +435,9 @@ fi
 
 exec "\$@"
 EOF
-    chmod ug+x "$LIBEXEC_DIR/@SLIC3R_APP_CMD@-env"
+    chmod a+x "$LIBEXEC_DIR/${SLIC3R_APP_CMD}-env"
 
-cat << EOF >@SLIC3R_APP_CMD@
+cat << EOF >${SLIC3R_APP_CMD}
 #!/bin/bash
 DIR=\$(dirname "\$(readlink -f "\$0")")
 export APPDIR="\${APPDIR:-\$DIR}"
@@ -380,14 +465,14 @@ if [ "\$XDG_SESSION_TYPE" = "wayland" ] && [ "\$ZINK_DISABLE_OVERRIDE" != "1" ];
         fi
     fi
 fi
-exec "\$DIR/libexec/@SLIC3R_APP_CMD@-env" "\$DIR/bin/@SLIC3R_APP_CMD@" "\$@"
+exec "\$DIR/libexec/${SLIC3R_APP_CMD}-env" "\$DIR/bin/${SLIC3R_APP_CMD}" "\$@"
 EOF
 
-    chmod ug+x @SLIC3R_APP_CMD@
-    cp -fl @SLIC3R_APP_CMD@ "$APPDIR/@SLIC3R_APP_CMD@"
+    chmod ug+x ${SLIC3R_APP_CMD}
+    cp -fl ${SLIC3R_APP_CMD} "$APPDIR/${SLIC3R_APP_CMD}"
 
     if [ -x "${CHECK_SCRIPT}" ] && [ -z "${ORCA_SKIP_APPIMAGE_AUDIT}" ]; then
-        "${CHECK_SCRIPT}" "$APPDIR" "$BIN_DIR/@SLIC3R_APP_CMD@"
+        "${CHECK_SCRIPT}" "$APPDIR" "$BIN_DIR/${SLIC3R_APP_CMD}"
     fi
 # } &> $ROOT/Build.log # Capture all command output
 echo "done"

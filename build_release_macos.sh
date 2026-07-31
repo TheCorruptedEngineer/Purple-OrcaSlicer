@@ -4,10 +4,13 @@ set -e
 set -o pipefail
 SECONDS=0
 
-while getopts ":dpa:snt:xbc:i:1Th" opt; do
+while getopts ":dpa:snt:xbc:i:1Tuh" opt; do
   case "${opt}" in
     d )
         export BUILD_TARGET="deps"
+        ;;
+    u )
+        export BUILD_TARGET="universal"
         ;;
     p )
         export PACK_DEPS="1"
@@ -48,6 +51,7 @@ while getopts ":dpa:snt:xbc:i:1Th" opt; do
         echo "   -d: Build deps only"
         echo "   -a: Set ARCHITECTURE (arm64 or x86_64 or universal)"
         echo "   -s: Build slicer only"
+        echo "   -u: Build universal app only (requires existing arm64 and x86_64 app bundles)"
         echo "   -n: Nightly build"
         echo "   -t: Specify minimum version of the target platform, default is 11.3"
         echo "   -x: Use Ninja Multi-Config CMake generator, default is Xcode"
@@ -55,7 +59,7 @@ while getopts ":dpa:snt:xbc:i:1Th" opt; do
         echo "   -c: Set CMake build configuration, default is Release"
         echo "   -i: Add a prefix to ignore during CMake dependency discovery (repeatable), defaults to /opt/local:/usr/local:/opt/homebrew"
         echo "   -1: Use single job for building"
-        echo "   -T: Build and run tests"
+        echo "   -T: Build and run tests (set ORCA_TESTS_BUILD_ONLY=1 to build without running)"
         exit 0
         ;;
     * )
@@ -175,6 +179,66 @@ function pack_deps() {
     )
 }
 
+# codesign cannot seal the runtime's dotted directories (include/python3.12,
+# lib/python3.12) anywhere under Contents/MacOS -- it mistakes any dotted
+# directory there for a nested bundle and fails with "bundle format
+# unrecognized" -- so packaged apps ship the runtime under Contents/Resources
+# with a compatibility symlink that keeps every Contents/MacOS/python path and
+# the @executable_path/python/lib rpath resolving unchanged.
+function relocate_python_runtime() {
+    local app="$1"
+    local pydir="$app/Contents/MacOS/python"
+    if [ -d "$pydir" ] && [ ! -L "$pydir" ]; then
+        rm -rf "$app/Contents/Resources/python"
+        mv "$pydir" "$app/Contents/Resources/python"
+        ln -s ../Resources/python "$pydir"
+    fi
+}
+
+# --- Bundled Python runtime verification --------------------------------------
+# Relocation is handled at the source: deps/python3/python3.cmake stamps
+# libpython with an @rpath id and src/CMakeLists.txt gives the app a matching
+# rpath. This gate catches regressions that would otherwise only surface as
+# launch failures on end users' machines (the absolute deps path still exists
+# on the build host, so a plain run can pass while relocation is broken --
+# hence the otool checks). The x86_64 leg runs under Rosetta on arm64 hosts.
+function verify_python_runtime() {
+    local app="$1"
+    local pydir="$app/Contents/MacOS/python"
+    [ -d "$pydir" ] || return 0  # app doesn't bundle Python (e.g. profile validator)
+    if [ ! -L "$pydir" ]; then
+        echo "ERROR: Contents/MacOS/python must be a symlink into Contents/Resources" >&2
+        echo "       (see relocate_python_runtime in this script)" >&2
+        exit 1
+    fi
+    # Version-agnostic interpreter name so a CPython version bump cannot
+    # silently skip the gate; if the dir exists the interpreter must too.
+    local pybin="$pydir/bin/python3"
+    if [ ! -x "$pybin" ]; then
+        echo "ERROR: bundled python/ present but no interpreter at $pybin" >&2
+        exit 1
+    fi
+    echo "  Verifying bundled Python runtime in $(basename "$app")..."
+    local bad
+    bad=$(otool -arch all -L "$pybin" "$app/Contents/MacOS/OrcaSlicer" | grep "libpython" | grep -v "@rpath/" || true)
+    if [ -n "$bad" ]; then
+        echo "ERROR: a bundled binary references libpython by absolute path (relocation regression):" >&2
+        echo "$bad" >&2
+        exit 1
+    fi
+    # otool -L shows load commands only; assert the consumer rpath separately.
+    # Its loss is masked on the build host by CMake's absolute build-tree rpath.
+    if ! otool -arch all -l "$app/Contents/MacOS/OrcaSlicer" | grep -q "path @executable_path/python/lib "; then
+        echo "ERROR: OrcaSlicer lacks the @executable_path/python/lib rpath (relocation regression)" >&2
+        exit 1
+    fi
+    if ! "$pybin" -c "import ssl"; then
+        echo "ERROR: bundled Python failed to start (libpython relocation broken," >&2
+        echo "       or missing Rosetta 2 for the x86_64 leg?)" >&2
+        exit 1
+    fi
+}
+
 function build_slicer() {
     # iterate over two architectures: x86_64 and arm64
     for _ARCH in x86_64 arm64; do
@@ -205,13 +269,10 @@ function build_slicer() {
             cmake --build . --config "$BUILD_CONFIG" --target "$SLICER_BUILD_TARGET"
         )
 
-        if [ "1." == "$BUILD_TESTS". ]; then
-            echo "Running tests for $_ARCH..."
-            (
-                set -x
-                cd "$PROJECT_BUILD_DIR"
-                ctest --build-config "$BUILD_CONFIG" --output-on-failure
-            )
+        # -T also runs the tests; ORCA_TESTS_BUILD_ONLY=1 builds them without
+        # running, so CI can build here and run them in a dedicated job.
+        if [ "1." == "$BUILD_TESTS". ] && [ "1." != "$ORCA_TESTS_BUILD_ONLY". ]; then
+            "$PROJECT_DIR/scripts/run_unit_tests.sh" "build/$_ARCH/tests" "$BUILD_CONFIG"
         fi
 
         echo "Verify localization with gettext..."
@@ -233,8 +294,11 @@ function build_slicer() {
             resources_path=$(readlink ./OrcaSlicer.app/Contents/Resources)
             rm ./OrcaSlicer.app/Contents/Resources
             cp -R "$resources_path" ./OrcaSlicer.app/Contents/Resources
+            relocate_python_runtime ./OrcaSlicer.app
             # delete .DS_Store file
             find ./OrcaSlicer.app/ -name '.DS_Store' -delete
+
+            verify_python_runtime ./OrcaSlicer.app
 
             # Copy OrcaSlicer_profile_validator.app if it exists
             if [ -f "../src$BUILD_DIR_CONFIG_SUBDIR/OrcaSlicer_profile_validator.app/Contents/MacOS/OrcaSlicer_profile_validator" ]; then
@@ -243,6 +307,7 @@ function build_slicer() {
                 cp -pR "../src$BUILD_DIR_CONFIG_SUBDIR/OrcaSlicer_profile_validator.app" ./OrcaSlicer_profile_validator.app
                 # delete .DS_Store file
                 find ./OrcaSlicer_profile_validator.app/ -name '.DS_Store' -delete
+                verify_python_runtime ./OrcaSlicer_profile_validator.app
             fi
         )
 
@@ -261,48 +326,55 @@ function build_slicer() {
     done
 }
 
+function lipo_dir() {
+    local universal_dir="$1"
+    local x86_64_dir="$2"
+
+    # Find all Mach-O files in the universal (arm64-based) copy and lipo them
+    while IFS= read -r -d '' f; do
+        local rel="${f#"$universal_dir"/}"
+        local x86="$x86_64_dir/$rel"
+        if [ -f "$x86" ]; then
+            echo "  lipo: $rel"
+            lipo -create "$f" "$x86" -output "$f.tmp"
+            mv "$f.tmp" "$f"
+        else
+            echo "  warning: no x86_64 counterpart for $rel, keeping arm64 only"
+        fi
+    done < <(find "$universal_dir" -type f -print0 | while IFS= read -r -d '' candidate; do
+        if file "$candidate" | grep -q "Mach-O"; then
+            printf '%s\0' "$candidate"
+        fi
+    done)
+}
+
 function build_universal() {
     echo "Building universal binary..."
 
     PROJECT_BUILD_DIR="$PROJECT_DIR/build/$ARCH"
+    ARM64_APP="$PROJECT_DIR/build/arm64/OrcaSlicer/OrcaSlicer.app"
+    X86_64_APP="$PROJECT_DIR/build/x86_64/OrcaSlicer/OrcaSlicer.app"
 
-    # Create universal binary
-    echo "Creating universal binary..."
-    # PROJECT_BUILD_DIR="$PROJECT_DIR/build_Universal"
     mkdir -p "$PROJECT_BUILD_DIR/OrcaSlicer"
     UNIVERSAL_APP="$PROJECT_BUILD_DIR/OrcaSlicer/OrcaSlicer.app"
     rm -rf "$UNIVERSAL_APP"
-    cp -R "$PROJECT_DIR/build/arm64/OrcaSlicer/OrcaSlicer.app" "$UNIVERSAL_APP"
+    cp -R "$ARM64_APP" "$UNIVERSAL_APP"
 
-    # Get the binary path inside the .app bundle
-    BINARY_PATH="Contents/MacOS/OrcaSlicer"
-
-    # Create universal binary using lipo
-    lipo -create \
-        "$PROJECT_DIR/build/x86_64/OrcaSlicer/OrcaSlicer.app/$BINARY_PATH" \
-        "$PROJECT_DIR/build/arm64/OrcaSlicer/OrcaSlicer.app/$BINARY_PATH" \
-        -output "$UNIVERSAL_APP/$BINARY_PATH"
-
-    echo "Universal binary created at $UNIVERSAL_APP"
+    echo "Creating universal binaries for OrcaSlicer.app..."
+    lipo_dir "$UNIVERSAL_APP" "$X86_64_APP"
+    echo "Universal OrcaSlicer.app created at $UNIVERSAL_APP"
+    verify_python_runtime "$UNIVERSAL_APP"
 
     # Create universal binary for profile validator if it exists
-    if [ -f "$PROJECT_DIR/build/arm64/OrcaSlicer/OrcaSlicer_profile_validator.app/Contents/MacOS/OrcaSlicer_profile_validator" ] && \
-       [ -f "$PROJECT_DIR/build/x86_64/OrcaSlicer/OrcaSlicer_profile_validator.app/Contents/MacOS/OrcaSlicer_profile_validator" ]; then
-        echo "Creating universal binary for OrcaSlicer_profile_validator..."
+    ARM64_VALIDATOR="$PROJECT_DIR/build/arm64/OrcaSlicer/OrcaSlicer_profile_validator.app"
+    X86_64_VALIDATOR="$PROJECT_DIR/build/x86_64/OrcaSlicer/OrcaSlicer_profile_validator.app"
+    if [ -d "$ARM64_VALIDATOR" ] && [ -d "$X86_64_VALIDATOR" ]; then
+        echo "Creating universal binaries for OrcaSlicer_profile_validator.app..."
         UNIVERSAL_VALIDATOR_APP="$PROJECT_BUILD_DIR/OrcaSlicer/OrcaSlicer_profile_validator.app"
         rm -rf "$UNIVERSAL_VALIDATOR_APP"
-        cp -R "$PROJECT_DIR/build/arm64/OrcaSlicer/OrcaSlicer_profile_validator.app" "$UNIVERSAL_VALIDATOR_APP"
-
-        # Get the binary path inside the profile validator .app bundle
-        VALIDATOR_BINARY_PATH="Contents/MacOS/OrcaSlicer_profile_validator"
-
-        # Create universal binary using lipo
-        lipo -create \
-            "$PROJECT_DIR/build/x86_64/OrcaSlicer/OrcaSlicer_profile_validator.app/$VALIDATOR_BINARY_PATH" \
-            "$PROJECT_DIR/build/arm64/OrcaSlicer/OrcaSlicer_profile_validator.app/$VALIDATOR_BINARY_PATH" \
-            -output "$UNIVERSAL_VALIDATOR_APP/$VALIDATOR_BINARY_PATH"
-
-        echo "Universal binary for OrcaSlicer_profile_validator created at $UNIVERSAL_VALIDATOR_APP"
+        cp -R "$ARM64_VALIDATOR" "$UNIVERSAL_VALIDATOR_APP"
+        lipo_dir "$UNIVERSAL_VALIDATOR_APP" "$X86_64_VALIDATOR"
+        echo "Universal OrcaSlicer_profile_validator.app created at $UNIVERSAL_VALIDATOR_APP"
     fi
 }
 
@@ -317,8 +389,12 @@ case "${BUILD_TARGET}" in
     slicer)
         build_slicer
         ;;
+    universal)
+        # No-op: the universal binary is lipo-merged from the existing arm64/x86_64
+        # app bundles below, not (re)built from source.
+        ;;
     *)
-        echo "Unknown target: $BUILD_TARGET. Available targets: deps, slicer, all."
+        echo "Unknown target: $BUILD_TARGET. Available targets: deps, slicer, all, universal."
         exit 1
         ;;
 esac

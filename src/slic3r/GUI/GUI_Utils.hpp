@@ -20,6 +20,7 @@
 #include <wx/settings.h>
 #include <wx/dataview.h>
 #include <wx/statbox.h>
+#include <wx/inspector/inspector.h>
 
 #include <chrono>
 #include "Event.hpp"
@@ -67,6 +68,10 @@ wxDECLARE_EVENT(EVT_VOLUME_DETACHED, VolumeDetachedEvent);
 
 wxTopLevelWindow* find_toplevel_parent(wxWindow *window);
 wxString format_nozzle_diameter(float diameter);
+// True when running inside an MSIX package (Microsoft Store build); always false on non-Windows.
+bool is_running_in_msix();
+// Opens the Microsoft Store product page for the current package. No-op when not packaged.
+void open_ms_store_product_page();
 
 void on_window_geometry(wxTopLevelWindow *tlw, std::function<void()> callback);
 
@@ -84,7 +89,7 @@ void update_dark_ui(wxWindow* window);
 
 extern std::deque<wxDialog*> dialogStack;
 
-template<class P> class DPIAware : public P
+template<class P> class DPIAware : public P, public wxInspector::wxInspectable
 {
 public:
     DPIAware(wxWindow *parent, wxWindowID id, const wxString &title, const wxPoint &pos=wxDefaultPosition,
@@ -103,6 +108,7 @@ public:
         this->SetFont(m_normal_font);
 #endif
         this->CenterOnParent();
+        SetupInspectorAccelerator(this);
 #ifdef _WIN32
         update_dark_ui(this);
 #endif
@@ -178,6 +184,11 @@ public:
 
     float   scale_factor() const        { return m_scale_factor; }
     float   prev_scale_factor() const   { return m_prev_scale_factor; }
+    // Only meant to be used by inspector, not public API
+    void    set_scale_factor(float v)      { m_scale_factor = v; }
+    void    set_prev_scale_factor(float v) { m_prev_scale_factor = v; }
+    void    set_em_unit(int v)             { m_em_unit = v; }
+    bool    force_rescale() const          { return m_force_rescale; }
 
     int     em_unit() const             { return m_em_unit; }
 //    int     font_size() const           { return m_font_size; }

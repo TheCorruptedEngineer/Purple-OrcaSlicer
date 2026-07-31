@@ -10,6 +10,7 @@ REQUIRED_DEV_PACKAGES=(
     g++
     gettext
     git
+    gstreamer1.0-gtk3
     libcurl4-openssl-dev
     libdbus-1-dev
     libglew-dev
@@ -40,6 +41,19 @@ then
             REQUIRED_DEV_PACKAGES+=(curl libfuse-dev m4)
             # libgstreamer1.0-dev on 22.x depends on libunwind-dev; include it explicitly to avoid unmet deps
             REQUIRED_DEV_PACKAGES+=(libunwind-dev)
+            # 22.x ships clang 14 by default. That toolchain has been observed to
+            # mis-codegen some numeric code (e.g. flush-volume computation produces
+            # much smaller purge amounts than the identical source built with the
+            # clang 18 that 24.x ships). Pull in clang 18 from the official LLVM
+            # apt repo so the build step can select it explicitly; see
+            # build_linux.sh's use of ORCA_CLANG_VERSION.
+            # `/etc/os-release` is already sourced above; reuse VERSION_CODENAME.
+            llvm_codename=${VERSION_CODENAME}
+            sudo wget -qO /usr/share/keyrings/llvm.asc https://apt.llvm.org/llvm-snapshot.gpg.key
+            sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg /usr/share/keyrings/llvm.asc
+            echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] https://apt.llvm.org/${llvm_codename}/ llvm-toolchain-${llvm_codename}-18 main" | sudo tee /etc/apt/sources.list.d/llvm18.list
+            sudo apt update
+            REQUIRED_DEV_PACKAGES+=(clang-18)
         fi
     fi
 
@@ -55,12 +69,36 @@ then
         REQUIRED_DEV_PACKAGES+=(libgstreamer1.0-dev)
     fi
 
-    # check which version of libwebkit2gtk is available
-    if [ "$(apt show --quiet libwebkit2gtk-4.0-dev 2>/dev/null)" != "" ]
+    # choose the appropriate libwebkit2gtk dev package based on availability
+    # Try 4.1 first (newer), then fall back to 4.0
+    if [ "$(apt show --quiet libwebkit2gtk-4.1-dev 2>/dev/null)" != "" ]
+    then
+        REQUIRED_DEV_PACKAGES+=(libwebkit2gtk-4.1-dev)
+    elif [ "$(apt show --quiet libwebkit2gtk-4.0-dev 2>/dev/null)" != "" ]
     then
         REQUIRED_DEV_PACKAGES+=(libwebkit2gtk-4.0-dev)
-    else
-        REQUIRED_DEV_PACKAGES+=(libwebkit2gtk-4.1-dev)
+    fi
+
+    # Ensure libsoup version matches webkit2gtk version
+    # webkit2gtk-4.1 uses libsoup-3.0, webkit2gtk-4.0 can use either
+    webkit_lib_found=0
+    if [ "$(apt show --quiet libwebkit2gtk-4.1-dev 2>/dev/null)" != "" ]; then
+        # webkit2gtk-4.1 requires libsoup-3.0
+        if [ "$(apt show --quiet libsoup-3.0-dev 2>/dev/null)" != "" ]; then
+            REQUIRED_DEV_PACKAGES+=(libsoup-3.0-dev)
+        elif [ "$(apt show --quiet libsoup3-dev 2>/dev/null)" != "" ]; then
+            REQUIRED_DEV_PACKAGES+=(libsoup3-dev)
+        fi
+        webkit_lib_found=1
+    fi
+    
+    if [ "$webkit_lib_found" -eq 0 ] && [ "$(apt show --quiet libwebkit2gtk-4.0-dev 2>/dev/null)" != "" ]; then
+        # webkit2gtk-4.0 can use libsoup-2.4 or 3.0
+        if [ "$(apt show --quiet libsoup-3.0-dev 2>/dev/null)" != "" ]; then
+            REQUIRED_DEV_PACKAGES+=(libsoup-3.0-dev)
+        elif [ "$(apt show --quiet libsoup3-dev 2>/dev/null)" != "" ]; then
+            REQUIRED_DEV_PACKAGES+=(libsoup3-dev)
+        fi
     fi
 
     # install them all at once
