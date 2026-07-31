@@ -136,7 +136,7 @@ private:
     void OnPaint(wxPaintEvent&)
     {
         wxPaintDC dc(this);
-        // Transparent â€” draw nothing
+        // Transparent — draw nothing
     }
 
     GdkWindowEdge get_gdk_edge(const wxPoint& pos) const
@@ -284,7 +284,7 @@ wxDEFINE_EVENT(EVT_SYNC_CLOUD_PRESET,     SimpleEvent);
 #ifdef __APPLE__
 static const wxString ctrl = ("Ctrl+");
 // FIXME: maybe should be using GUI::shortkey_ctrl_prefix() or equivalent?
-static const std::string ctrl_t = u8"\u2318+"; // "âŒ˜" (Mac Command)
+static const std::string ctrl_t = u8"\u2318+"; // "⌘" (Mac Command)
 #else
 static const wxString ctrl = _L("Ctrl+");
 // FIXME: maybe should be using GUI::shortkey_ctrl_prefix() or equivalent?
@@ -1108,7 +1108,7 @@ void MainFrame::shutdown()
 {
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << "MainFrame::shutdown enter";
 #ifdef __WXGTK__
-    // Edge panels are child windows â€” wxWidgets destroys them automatically.
+    // Edge panels are child windows — wxWidgets destroys them automatically.
     m_edge_bottom = nullptr;
     m_edge_left   = nullptr;
     m_edge_right  = nullptr;
