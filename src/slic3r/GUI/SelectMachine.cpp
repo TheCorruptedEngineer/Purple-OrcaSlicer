@@ -3408,7 +3408,7 @@ void SelectMachineDialog::show_timelapse_storage_dialog(MachineObject* obj)
     if (show_confirm_btn) {
         auto* btn_confirm = new Button(&dlg, _L("Confirm & Print"));
         // Orca: use the accent green rather than the reference's hard-coded confirm colour.
-        StateColor confirm_bg(std::pair<wxColour, int>(wxColour(0, 150, 136), StateColor::Normal));
+        StateColor confirm_bg(std::pair<wxColour, int>(wxColour(177, 60, 255), StateColor::Normal));
         btn_confirm->SetBackgroundColor(confirm_bg);
         btn_confirm->SetTextColor(StateColor(std::pair<wxColour, int>(*wxWHITE, StateColor::Normal)));
         btn_confirm->Bind(wxEVT_BUTTON, [&dlg](wxCommandEvent&) { dlg.EndModal(wxID_OK); });
@@ -3418,7 +3418,7 @@ void SelectMachineDialog::show_timelapse_storage_dialog(MachineObject* obj)
     auto* btn_cancel_tl = new Button(&dlg, _L("Cancel Timelapse & Print"));
     if (!show_confirm_btn) {
         // Orca: use the accent green rather than the reference's hard-coded confirm colour.
-        StateColor cancel_bg(std::pair<wxColour, int>(wxColour(0, 150, 136), StateColor::Normal));
+        StateColor cancel_bg(std::pair<wxColour, int>(wxColour(177, 60, 255), StateColor::Normal));
         btn_cancel_tl->SetBackgroundColor(cancel_bg);
         btn_cancel_tl->SetTextColor(StateColor(std::pair<wxColour, int>(*wxWHITE, StateColor::Normal)));
     }

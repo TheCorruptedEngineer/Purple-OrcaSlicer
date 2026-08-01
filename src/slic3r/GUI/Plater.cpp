@@ -2479,7 +2479,7 @@ Sidebar::Sidebar(Plater *parent)
 
         struct PanelColors {
             wxColour bg_normal = "#FFFFFF";
-            wxColour bg_focus  = "#E5F0EE";
+            wxColour bg_focus  = "#E5D6FF";
             wxColour bd_normal = "#DBDBDB";
             wxColour bd_hover  = "#B13CFF";
             wxColour bd_focus  = "#B13CFF";
