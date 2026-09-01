@@ -2,6 +2,7 @@
 #include "PrintConfigConstants.hpp"
 #include "ClipperUtils.hpp"
 #include "Config.hpp"
+#include "FilamentMixer.hpp"
 #include "MaterialType.hpp"
 #include "I18N.hpp"
 #include "format.hpp"
@@ -72,6 +73,8 @@ const std::vector<std::string> filament_extruder_override_keys = {
     "filament_deretraction_speed",
     "filament_retract_restart_extra",  //not in filament_options_with_variant, added on 20250816
     "filament_retraction_minimum_travel",
+    "filament_retract_length_toolchange",
+    "filament_retract_restart_extra_toolchange",
     // BBS: floats
     "filament_wipe_distance",
     // bools
@@ -199,6 +202,29 @@ static t_config_enum_values s_keys_map_PowerLossRecoveryMode {
     { "disable",                int(PowerLossRecoveryMode::Disable) }
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(PowerLossRecoveryMode)
+
+// Orca: wave-overhang ring spacing mode
+static t_config_enum_values s_keys_map_WaveOverhangSpacingMode {
+    { "uniform",     wosmUniform },
+    { "progressive", wosmProgressive }
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(WaveOverhangSpacingMode)
+
+// Orca: wave-overhang seam mode
+static t_config_enum_values s_keys_map_WaveOverhangSeamMode {
+    { "alternating", woseAlternating },
+    { "aligned",     woseAligned },
+    { "random",      woseRandom }
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(WaveOverhangSeamMode)
+
+// Wave-overhang fill pattern (ported from stmcculloch alpha.6).
+static t_config_enum_values s_keys_map_WaveOverhangPattern {
+    { "monotonic", int(WaveOverhangPattern::Monotonic) },
+    { "zigzag",    int(WaveOverhangPattern::ZigZag) },
+    { "smart",     int(WaveOverhangPattern::Smart) }
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(WaveOverhangPattern)
 
 static t_config_enum_values s_keys_map_CenterOfSurfacePattern{
     {"each_surface", int(CenterOfSurfacePattern::Each_Surface)},
@@ -1945,6 +1971,13 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(1));
 
+    def = this->add("brim_ears_outer_only", coBool);
+    def->label = L("Brim ears outer only");
+    def->category = L("Support");
+    def->tooltip = L("Generate mouse ears only on the outer contour of the model, excluding holes and enclosed sections.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
     def = this->add("compatible_printers", coStrings);
     def->label = L("Select printers");
     def->mode = comAdvanced;
@@ -3318,6 +3351,62 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionBools { false });
 
+    // Mixed-color filament. A slot flagged here is virtual: it is not loaded into any
+    // physical extruder, but resolved at slicing time into the physical filaments listed
+    // in filament_mixed_components, blended either by splitting each layer into
+    // sub-layers or by alternating whole layers (see enable_mixed_color_sublayer).
+    def          = this->add("filament_is_mixed", coBools);
+    def->label   = L("Is mixed filament");
+    def->tooltip = L("Whether this filament slot is a mixed filament composed of multiple physical filaments");
+    def->mode    = comDevelop;
+    def->set_default_value(new ConfigOptionBools{false});
+
+    def          = this->add("filament_mixed_components", coStrings);
+    def->label   = L("Mixed filament components");
+    def->tooltip = L("Comma-separated 1-based indices of component filaments, e.g. \"1,3\"");
+    def->mode    = comDevelop;
+    def->set_default_value(new ConfigOptionStrings{""});
+
+    def          = this->add("filament_mixed_sublayer_ratios", coStrings);
+    def->label   = L("Mixed filament sublayer ratios");
+    def->tooltip = L("Comma-separated ratio values summing to 1.0, e.g. \"0.7,0.3\"");
+    def->mode    = comDevelop;
+    def->set_default_value(new ConfigOptionStrings{""});
+
+    def          = this->add("filament_mixed_gradient", coBools);
+    def->label   = L("Mixed filament gradient");
+    def->tooltip = L("Enable Z-direction gradient mode for mixed filament sub-layers. "
+                     "When enabled, the sub-layer ratios vary linearly across layers.");
+    def->mode    = comDevelop;
+    def->set_default_value(new ConfigOptionBools{false});
+
+    def          = this->add("filament_mixed_gradient_range", coStrings);
+    def->label   = L("Mixed filament gradient range");
+    def->tooltip = L("Start and end ratios for the first component in gradient mode. "
+                     "Comma-separated pair, e.g. \"0.10,0.90\" means 10% to 90%.");
+    def->mode    = comDevelop;
+    def->set_default_value(new ConfigOptionStrings{""});
+
+    def          = this->add("filament_mixed_gradient_curve", coStrings);
+    def->label   = L("Mixed filament gradient curve");
+    def->tooltip = L("Optional Photoshop-style custom curve mapping Z progress to the first "
+                     "component ratio. Encoded as pipe-separated control points, "
+                     "either \"x,y\" (legacy) or \"x,y,m_in,m_out\" when a tangent override "
+                     "is needed (empty token or \"nan\" means use PCHIP default). "
+                     "x in [0,1]; y is clamped to the configured ratio range, "
+                     "e.g. \"0,0.15|0.5,0.50|1,0.85\". When empty, the linear "
+                     "gradient_range is used instead.");
+    def->mode    = comDevelop;
+    def->set_default_value(new ConfigOptionStrings{""});
+
+    def          = this->add("filament_mixed_gradient_per_part", coBools);
+    def->label   = L("Mixed filament per-part gradient");
+    def->tooltip = L("When gradient mode is enabled, apply the gradient to each part of an "
+                     "assembly independently rather than treating the whole assembly as one "
+                     "Z range.");
+    def->mode    = comDevelop;
+    def->set_default_value(new ConfigOptionBools{false});
+
     // defined in bits
     // 0 means cannot support, 1 means support
     // 0 bit: can support in left extruder
@@ -3520,6 +3609,17 @@ void PrintConfigDef::init_fff_params()
     def->enum_labels.push_back(L("Archimedean Chords"));
     def->enum_labels.push_back(L("Octagram Spiral"));
     def->set_default_value(new ConfigOptionEnum<InfillPattern>(ipCrossHatch));
+
+    def = this->add("sparse_infill_smooth_factor", coPercent);
+    def->label = L("Sparse infill smooth factor");
+    def->category = L("Strength");
+    def->tooltip = L("Controls how strongly sparse infill corners are rounded. 0% keeps the original sharp path, "
+                     "while 100% produces the largest possible curves between adjacent infill lines.");
+    def->sidetext = "%";
+    def->min = 0;
+    def->max = 100;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionPercent(0));
 
     def = this->add("top_surface_acceleration", coFloats);
     def->label = L("Top surface");
@@ -4303,6 +4403,15 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->readonly = false;
     def->set_default_value(new ConfigOptionEnum<GCodeFlavor>(gcfMarlinLegacy));
+
+    def = this->add("gcode_skip_config_block", coBool);
+    def->label = L("Skip G-code config block");
+    def->tooltip = L("Do not write the CONFIG_BLOCK (slicer configuration key/value pairs) into the G-code file. "
+                   "This can help with printers whose firmware crashes when parsing these comment lines "
+                   "(e.g. Anycubic go-klipper). Note: the G-code file will no longer contain slicer settings, "
+                   "so importing it back into OrcaSlicer will not restore the configuration.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
 
     def          = this->add("pellet_modded_printer", coBool);
     def->label   = L("Pellet Modded Printer");
@@ -5512,6 +5621,492 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionBool(true));
 
+    // Wave Overhangs
+    def = this->add("wave_overhangs", coBool);
+    def->label = L("Use wave overhangs (Experimental)");
+    def->category = L("Strength");
+    def->tooltip = L("Generate wave-patterned perimeters over overhangs to print steep angles "
+                     "without supports.");
+    def->mode = comSimple;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("wave_overhangs_instead_of_bridges", coBool);
+    def->label = L("Use wave overhangs instead of bridges");
+    def->category = L("Strength");
+    def->tooltip = L("When wave overhangs are enabled, suppress every bridge classification "
+                     "in this region and fill with solid infill instead. Off by default: simple "
+                     "flat spans stay as regular bridges, only concave or holed overhangs get "
+                     "waves. Turn on to guarantee no bridge patterns anywhere in the region "
+                     "(bottom bridges and internal bridges both become solid infill).");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("wave_overhang_outer_perimeters", coInt);
+    def->label = L("Perimeters");
+    def->category = L("Strength");
+    def->tooltip = L("Number of outer perimeters preserved inside the overhang region. The rest of the "
+                     "overhang is replaced by the wave pattern. Independent of Quality › Walls: "
+                     "setting this to 1 always gives one outer wall then wave, regardless of how many "
+                     "walls the rest of the object uses. 1 is usually enough. Set to 0 for pure wave "
+                     "(no perimeter at the overhang boundary). Capped at the effective wall count for "
+                     "the layer (e.g. 1 on topmost layers with \"only one wall top\").");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->set_default_value(new ConfigOptionInt(1));
+
+    def = this->add("wave_overhang_perimeter_overlap", coFloat);
+    def->label = L("Perimeter overlap");
+    def->category = L("Strength");
+    def->tooltip = L("Extends the wave propagation boundary toward nearby perimeter lines so the last wave sits closer to the kept perimeter. "
+                     "This reduces the gap between wave lines and perimeter shells.");
+    def->sidetext = L("mm");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0.1));
+
+    def = this->add("wave_overhang_minimum_width", coFloat);
+    def->label = L("Minimum wave width");
+    def->category = L("Strength");
+    def->tooltip = L("If a narrow neck in the wave region is smaller than this width, a thin split is inserted there before propagation so fragile wave branches do not form. "
+                     "Larger values split more aggressively.");
+    def->sidetext = L("mm");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0.7));
+
+    def = this->add("wave_overhang_pattern", coEnum);
+    def->label = L("Pattern");
+    def->category = L("Strength");
+    def->tooltip = L("Controls whether wave-overhang tracks are printed one direction at a time (monotonic), "
+                     "connected into a back-and-forth meander (zig-zag), or started from the better-supported end of each new wave line (smart).");
+    def->enum_keys_map = &ConfigOptionEnum<WaveOverhangPattern>::get_enum_values();
+    def->enum_values.push_back("monotonic");
+    def->enum_values.push_back("zigzag");
+    def->enum_values.push_back("smart");
+    def->enum_labels.push_back(L("Monotonic"));
+    def->enum_labels.push_back(L("Zigzag"));
+    def->enum_labels.push_back(L("Smart"));
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionEnum<WaveOverhangPattern>(WaveOverhangPattern::Smart));
+
+    def = this->add("wave_overhang_line_spacing", coFloat);
+    def->label = L("Line spacing");
+    def->category = L("Strength");
+    def->tooltip = L("Center-to-center distance between adjacent wave-overhang extrusions.");
+    def->sidetext = L("mm");
+    def->mode = comAdvanced;
+    def->min = 0.01;
+    def->set_default_value(new ConfigOptionFloat(0.35));
+
+    def = this->add("wave_overhang_flow_mm3_per_mm", coFloat);
+    def->label = L("Wave flow");
+    def->category = L("Strength");
+    def->tooltip = L("Volume of plastic extruded per millimetre of wave-overhang line, in mm³/mm.\n\n"
+                     "Default 0.15 is a calibrated reference value for a 0.4 mm nozzle. "
+                     "The bead hangs in air rather than being squished against a layer below, so layer "
+                     "height has no effect on its cross-section. For non-0.4 mm nozzles, scale as "
+                     "0.15 × (nozzle/0.4)²: about 0.09 for 0.3 mm, 0.34 for 0.6 mm, 0.60 for 0.8 mm.\n\n"
+                     "Raise if wave lines look thin or broken; lower if they blob together.");
+    def->sidetext = L("mm³/mm");
+    def->mode = comAdvanced;
+    def->min = 0.02;
+    def->max = 1.5;
+    def->set_default_value(new ConfigOptionFloat(0.15));
+
+    def = this->add("wave_overhang_print_speed", coFloat);
+    def->label = L("Print speed");
+    def->category = L("Speed");
+    def->tooltip = L("Print speed for wave-overhang extrusions. Slow speeds give better cooling "
+                     "and adhesion of the cantilevered tracks.");
+    def->sidetext = L("mm/s");
+    def->mode = comAdvanced;
+    def->min = 0.1;
+    def->set_default_value(new ConfigOptionFloat(2.0));
+
+    def = this->add("wave_overhang_perimeter_speed", coFloat);
+    def->label = L("Perimeter speed");
+    def->category = L("Speed");
+    def->tooltip = L("Print speed for the walls (perimeters) on layers that contain wave-overhang "
+                     "traces. The walls in those layers anchor onto the cantilevered wave traces, "
+                     "so printing them at the regular outer/inner wall speed often pulls the wave "
+                     "loose or starves adhesion. 0 = inherit the normal wall speed.");
+    def->sidetext = L("mm/s");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 1000;
+    def->set_default_value(new ConfigOptionFloat(0.0));
+
+    def = this->add("wave_overhang_travel_speed", coFloat);
+    def->label = L("Travel speed");
+    def->category = L("Speed");
+    def->tooltip = L("Travel speed within wave-overhang regions (between non-extruding hops).");
+    def->sidetext = L("mm/s");
+    def->mode = comAdvanced;
+    def->min = 1.0;
+    def->set_default_value(new ConfigOptionFloat(40.0));
+
+    def = this->add("wave_overhang_fan_speed", coInt);
+    def->label = L("Fan speed");
+    def->category = L("Cooling");
+    def->tooltip = L("Part-cooling fan percentage forced during wave-overhang extrusions. "
+                     "Maximum cooling is usually best.");
+    def->sidetext = L("%");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 100;
+    def->set_default_value(new ConfigOptionInt(100));
+
+    def = this->add("wave_overhang_aux_fan_speed", coInt);
+    def->label = L("Aux fan speed");
+    def->category = L("Cooling");
+    def->tooltip = L("Auxiliary (chamber/side) fan percentage forced during wave-overhang extrusions. "
+                     "Useful when you want strong sideways airflow on the unsupported wave tracks "
+                     "without ramping up the printhead fan (which can cause an intra-layer thermal "
+                     "gradient near the nozzle). Requires the printer's auxiliary fan to be enabled. "
+                     "-1 = inherit the normal aux fan speed.");
+    def->sidetext = L("%");
+    def->mode = comAdvanced;
+    def->min = -1;
+    def->max = 100;
+    def->set_default_value(new ConfigOptionInt(-1));
+
+    def = this->add("wave_overhang_nozzle_temp", coInt);
+    def->label = L("Nozzle temperature");
+    def->category = L("Cooling");
+    def->tooltip = L("If non-zero, override the hotend temperature specifically for wave-overhang "
+                     "extrusions. An M104 is emitted at the start of each wave region and restored "
+                     "to the filament default at the end. Useful to experiment with cooler extrusion "
+                     "on the unsupported tracks (less sagging, better cooling). Set to 0 to keep the "
+                     "filament default.");
+    def->sidetext = L("°C");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 350;
+    def->set_default_value(new ConfigOptionInt(0));
+
+    def = this->add("wave_overhang_min_wave_time", coFloat);
+    def->label = L("Min wave time");
+    def->category = L("Cooling");
+    def->tooltip = L("Minimum time in seconds each wave region must take. If a wave region's "
+                     "extrusion would finish faster than this, a G4 dwell pads the difference "
+                     "before the next region — gives each ring time to solidify. Set to 0 to "
+                     "disable.");
+    def->sidetext = L("s");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 60;
+    def->set_default_value(new ConfigOptionFloat(0.0));
+
+    def = this->add("wave_overhang_min_layer_time", coFloat);
+    def->label = L("Min layer time");
+    def->category = L("Cooling");
+    def->tooltip = L("Minimum time in seconds the wave layer must take (from first wave "
+                     "extrusion to layer end). If the layer would finish faster than this, a "
+                     "G4 dwell pads the difference before the next layer starts — gives the "
+                     "wave bed time to solidify before solid infill lands on top. Targets "
+                     "warping. Set to 0 to disable.");
+    def->sidetext = L("s");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 300;
+    def->set_default_value(new ConfigOptionFloat(0.0));
+
+    def = this->add("wave_overhang_corner_taper_enable", coBool);
+    def->label = L("Enable corner-aware spacing taper");
+    def->category = L("Quality");
+    def->tooltip = L("When enabled, the wave-overhang generator densifies line spacing near sharp "
+                     "convex corners of the overhang outline. Corners warp worst because their "
+                     "cantilevered wave lines are short and have little neighbouring material to "
+                     "fuse with, so they curl as PLA cools. Packing more lines into a small radius "
+                     "around each corner gives each short line a neighbour to bond with, resisting "
+                     "the curl. The corner radius, denser spacing, and angle threshold appear when "
+                     "this is on.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("wave_overhang_line_spacing_corner", coFloat);
+    def->label = L("Corner line spacing");
+    def->category = L("Quality");
+    def->tooltip = L("Denser line spacing used near detected sharp corners of the overhang region. "
+                     "Corners warp worst because short cantilevered wave lines cool unevenly and curl. "
+                     "Packing more lines into the corner zone gives each line a nearby neighbour to "
+                     "fuse with, resisting the curl. Must be smaller than the main line spacing for "
+                     "the taper to engage; the master toggle above must also be on.");
+    def->sidetext = L("mm");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 2;
+    def->set_default_value(new ConfigOptionFloat(0.0));
+
+    def = this->add("wave_overhang_corner_taper_distance", coFloat);
+    def->label = L("Corner taper distance");
+    def->category = L("Quality");
+    def->tooltip = L("Radius around each detected corner vertex over which the tapered (denser) "
+                     "spacing is applied. Lines inside this radius use the corner spacing; lines "
+                     "further in use the normal spacing. Larger values widen the reinforced zone "
+                     "at the cost of more extrusion time. Set to 0 to disable corner tapering.");
+    def->sidetext = L("mm");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 20;
+    def->set_default_value(new ConfigOptionFloat(0.0));
+
+    def = this->add("wave_overhang_corner_angle_threshold", coFloat);
+    def->label = L("Corner angle threshold");
+    def->category = L("Quality");
+    def->tooltip = L("A vertex on the overhang contour is classified as a corner when its interior "
+                     "angle is smaller than this threshold. Smaller values catch only very sharp "
+                     "corners; larger values flag gentler turns too. 90 degrees is a reasonable "
+                     "default for most shapes.");
+    def->sidetext = L("degrees");
+    def->mode = comAdvanced;
+    def->min = 10;
+    def->max = 180;
+    def->set_default_value(new ConfigOptionFloat(90.0));
+
+    def = this->add("wave_overhang_end_retract_length", coFloat);
+    def->label = L("End-of-line retract");
+    def->category = L("Quality");
+    def->tooltip = L("Force a retraction of this many mm at the end of every wave-overhang line, "
+                     "independent of the filament's normal retraction settings. Relieves nozzle "
+                     "pressure so residual melt doesn't ooze into the gap between adjacent wave "
+                     "lines or bead up against the enclosing perimeter. The next wave line's lead-in "
+                     "travel automatically unretracts. Set to 0 to rely on Orca's normal travel-"
+                     "distance retraction heuristic.");
+    def->sidetext = L("mm");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 10;
+    def->set_default_value(new ConfigOptionFloat(0.0));
+
+    def = this->add("wave_overhang_floor_layers", coInt);
+    def->label = L("Floor layers");
+    def->category = L("Strength");
+    def->tooltip = L("Number of solid floor layers placed directly above wave-overhang regions. "
+                     "These layers bridge over the wave surface and give the cantilever mechanical backing.\n\n"
+                     "This count is authoritative inside the wave region, not additive with the normal shell "
+                     "settings: the layers above a wave are governed by this value alone, and the usual top/bottom "
+                     "shell propagation is suppressed there.\n\n"
+                     "0 = no solid backing at all above the wave (the region is filled with sparse infill). "
+                     "Choose 0 only for a pure-wave overhang with nothing resting on it.");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 20;
+    def->set_default_value(new ConfigOptionInt(2));
+
+    def = this->add("wave_overhang_floor_use_hilbert", coBool);
+    def->label = L("Hilbert curve floor");
+    def->category = L("Strength");
+    def->tooltip = L("Force the solid floor layers above wave-overhang regions to use a Hilbert curve "
+                     "infill pattern instead of the region's normal solid-infill pattern. Fractal scan "
+                     "paths leave the smallest residual thermal stresses, which significantly reduces "
+                     "warping that pulls long cantilevered overhangs upward as the layers above cool. "
+                     "Opt-in: when off, floor layers retain the existing pattern.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("wave_overhang_floor_hilbert_layers", coInt);
+    def->label = L("Hilbert floor layer count");
+    def->category = L("Strength");
+    def->tooltip = L("Of the N solid floor layers above each wave region, only the bottom M get the "
+                     "Hilbert pattern; the rest use the default solid-infill pattern. The lowest "
+                     "layers warp most, so capping the Hilbert band saves print time without losing "
+                     "much warping benefit. 0 = match Floor layers (Hilbert on every solid floor).");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 20;
+    def->set_default_value(new ConfigOptionInt(0));
+
+    def = this->add("wave_overhang_floor_hilbert_density", coInt);
+    def->label = L("Hilbert floor density");
+    def->category = L("Strength");
+    def->tooltip = L("Infill percentage for the Hilbert-pattern floor layers. 100 = recipe-spec solid "
+                     "Hilbert (matches the cited research). Below 100 turns the floor into a sparse "
+                     "Hilbert: faster and less material, at the cost of weaker mechanical backing for "
+                     "the wave below. Experimental setting — 100 is the safe default.");
+    def->sidetext = L("%");
+    def->mode = comAdvanced;
+    def->min = 1;
+    def->max = 100;
+    def->set_default_value(new ConfigOptionInt(100));
+
+    def = this->add("wave_overhang_floor_print_speed", coFloat);
+    def->label = L("Hilbert floor print speed");
+    def->category = L("Speed");
+    def->tooltip = L("Print speed for the Hilbert-pattern floor layers above wave-overhang regions. "
+                     "Slower speeds give each line more time to dissipate heat before the next "
+                     "neighbouring line lands on top, reducing the residual thermal stress that drives "
+                     "warping. 0 = inherit the normal solid-infill speed.");
+    def->sidetext = L("mm/s");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 1000;
+    def->set_default_value(new ConfigOptionFloat(0.0));
+
+    def = this->add("wave_overhang_floor_perimeter_speed", coFloat);
+    def->label = L("Floor perimeter speed");
+    def->category = L("Speed");
+    def->tooltip = L("Print speed for the walls (perimeters) on the floor layers above wave-overhang "
+                     "regions. The fragile wave shadow underneath warps when fast walls land on top, "
+                     "so slowing them lets the substrate stay closer to bed temperature and relaxes "
+                     "thermal stress. 0 = inherit the normal wall speed.");
+    def->sidetext = L("mm/s");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 1000;
+    def->set_default_value(new ConfigOptionFloat(0.0));
+
+    def = this->add("wave_overhang_floor_speed_ramp", coInt);
+    def->label = L("Floor speed ramp");
+    def->category = L("Speed");
+    def->tooltip = L("Number of layers over which the floor-layer speed overrides (Floor print speed "
+                     "and Floor perimeter speed) ramp linearly from the slow override speed back up "
+                     "to the normal print/wall speed.\n\n"
+                     "0 = step function (current behaviour): every floor layer prints at the override "
+                     "speed, then snaps back to normal on the next layer.\n"
+                     "1..N = layer 1 above the wave prints at the override speed, layer N (or the last "
+                     "floor layer, whichever comes first) prints at full normal speed, with linear "
+                     "interpolation in between.\n\n"
+                     "Helpful for releasing the thermal stress that builds up at the speed transition: "
+                     "the gradual ramp keeps each layer slightly warmer than the next as the print "
+                     "moves away from the wave shadow, so curl is spread across the ramp instead of "
+                     "concentrated at one boundary.\n\n"
+                     "Capped by Floor layers; if you set a ramp longer than the floor-layer count, "
+                     "the ramp ends at the top floor layer.");
+    def->sidetext = L("layers");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 64;
+    def->set_default_value(new ConfigOptionInt(0));
+
+    def = this->add("wave_overhang_floor_fan_speed", coInt);
+    def->label = L("Hilbert floor fan speed");
+    def->category = L("Cooling");
+    def->tooltip = L("Cooling fan percentage forced during the Hilbert-pattern floor layers above "
+                     "wave-overhang regions. Lower fan keeps the layer warmer for longer, letting "
+                     "thermal stress relax before it solidifies into a permanently-curled state. "
+                     "Counter-intuitive but matches the cited research: warmer = more stress relaxation. "
+                     "-1 = inherit the normal fan speed.");
+    def->sidetext = L("%");
+    def->mode = comAdvanced;
+    def->min = -1;
+    def->max = 100;
+    def->set_default_value(new ConfigOptionInt(-1));
+
+    def = this->add("wave_overhang_floor_aux_fan_speed", coInt);
+    def->label = L("Hilbert floor aux fan speed");
+    def->category = L("Cooling");
+    def->tooltip = L("Auxiliary (chamber/side) fan percentage forced during the Hilbert-pattern floor "
+                     "layers above wave-overhang regions. Pair with a low printhead fan to keep the "
+                     "layer warm near the nozzle while still moving air through the chamber. "
+                     "Requires the printer's auxiliary fan to be enabled. "
+                     "-1 = inherit the normal aux fan speed.");
+    def->sidetext = L("%");
+    def->mode = comAdvanced;
+    def->min = -1;
+    def->max = 100;
+    def->set_default_value(new ConfigOptionInt(-1));
+
+    def = this->add("wave_overhang_min_angle", coFloat);
+    def->label = L("Min angle");
+    def->category = L("Strength");
+    def->tooltip = L("Soft limit only — currently NOT enforced. Orca's upstream overhang "
+                     "detection (Strength → Detect overhang walls / Overhang reverse "
+                     "threshold) is the primary slope filter that decides which regions "
+                     "become wave-overhang candidates. This value is kept as metadata on "
+                     "the profile for potential future use. 0 = no filtering.");
+    def->sidetext = L("°");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 90;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("wave_overhang_spacing_mode", coEnum);
+    def->label = L("Spacing mode");
+    def->category = L("Strength");
+    def->tooltip = L("How ring-to-ring spacing varies across the wave. Uniform keeps constant step. "
+                     "Progressive tightens near the supported edge and widens toward the cantilever tip "
+                     "for better mechanical anchoring.");
+    def->enum_keys_map = &ConfigOptionEnum<WaveOverhangSpacingMode>::get_enum_values();
+    def->enum_values.push_back("uniform");
+    def->enum_values.push_back("progressive");
+    def->enum_labels.push_back(L("Uniform"));
+    def->enum_labels.push_back(L("Progressive"));
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionEnum<WaveOverhangSpacingMode>(wosmUniform));
+
+    def = this->add("wave_overhang_seam_mode", coEnum);
+    def->label = L("Seam mode");
+    def->category = L("Strength");
+    def->tooltip = L("Direction pattern across successive wave rings. Alternating (boustrophedon) minimizes "
+                     "travel. Aligned keeps all rings same-direction for consistent flow but adds travel jumps. "
+                     "Random hides the start seam in high-visibility surfaces.");
+    def->enum_keys_map = &ConfigOptionEnum<WaveOverhangSeamMode>::get_enum_values();
+    def->enum_values.push_back("alternating");
+    def->enum_values.push_back("aligned");
+    def->enum_values.push_back("random");
+    def->enum_labels.push_back(L("Alternating"));
+    def->enum_labels.push_back(L("Aligned"));
+    def->enum_labels.push_back(L("Random"));
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionEnum<WaveOverhangSeamMode>(woseAlternating));
+
+    def = this->add("wave_overhang_debug_gcode", coBool);
+    def->label = L("Debug g-code");
+    def->category = L("Strength");
+    def->tooltip = L("Emit ';WAVE_OVERHANG_START'/';WAVE_OVERHANG_END' comments around wave-overhang "
+                     "extrusions in the G-code. Useful for post-process inspection and debugging. "
+                     "Comments-only — no effect on the print.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(true));
+
+    def = this->add("wave_overhang_min_length", coFloat);
+    def->label = L("Min length");
+    def->category = L("Strength");
+    def->tooltip = L("Minimum overhang perimeter length (in mm) below which wave-overhang generation "
+                     "is skipped. Useful to avoid waving tiny overhangs where normal perimeters are fine.");
+    def->sidetext = L("mm");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 50;
+    def->set_default_value(new ConfigOptionFloat(0.0));
+
+    def = this->add("wave_overhang_max_iterations", coInt);
+    def->label = L("Max iterations");
+    def->category = L("Strength");
+    def->tooltip = L("Safety cap on the wave-overhang generator's main loop: max wavefronts per overhang "
+                     "region. 0 = unlimited (stops naturally when the generator can't grow further). "
+                     "Useful for bounding print time on very large overhangs.");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 500;
+    def->set_default_value(new ConfigOptionInt(0));
+
+    def = this->add("wave_overhang_min_new_area", coFloat);
+    def->label = L("Min new area");
+    def->category = L("Strength");
+    def->tooltip = L("Termination threshold for wave-overhang propagation: when a new wavefront adds less "
+                     "than this much new area over the previous wavefront, stop propagating. "
+                     "Lower = longer propagation, potentially denser coverage. Higher = earlier "
+                     "termination. Default 0.01 mm² is a safe early-stop; lower toward 0.0001 for "
+                     "maximum coverage.");
+    def->sidetext = L("mm²");
+    def->mode = comDevelop;
+    def->min = 0.0;
+    def->max = 100.0;
+    def->set_default_value(new ConfigOptionFloat(0.01));
+
+    def = this->add("support_remaining_areas_after_wave_overhangs", coBool);
+    def->label = L("Support unfilled wave overhang areas");
+    def->category = L("Support");
+    def->tooltip = L("When wave overhangs are enabled AND supports are on, only generate supports "
+                     "for overhang areas the wave toolpaths did NOT cover. Explicit support enforcers "
+                     "still apply normally. Disable to let the support generator ignore wave coverage "
+                     "(treats every overhang as if waves weren't there).");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(true));
+
+
     def = this->add("outer_wall_filament_id", coInt);
     def->gui_type = ConfigOptionDef::GUIType::i_enum_open;
     def->label = L("Outer walls");
@@ -5770,12 +6365,10 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionFloatsNullable{10});
 
     def = this->add("retract_length_toolchange", coFloats);
-    def->label = L("Length");
-    //def->full_label = L("Retraction Length (Toolchange)");
-    def->full_label = "Retraction Length (Toolchange)";
-    //def->tooltip = L("When retraction is triggered before changing tool, filament is pulled back "
-    //               "by the specified amount (the length is measured on raw filament, before it enters "
-    //               "the extruder).");
+    def->label = L("Retraction Length (Toolchange)");
+    def->tooltip = L("When retraction is triggered before changing tool, filament is pulled back "
+                  "by the specified amount (the length is measured on raw filament, before it enters "
+                  "the extruder).");
     def->sidetext = L("mm");	// millimeters, CIS languages need translation
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloats { 10. });
@@ -6029,7 +6622,7 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionFloats { 0. });
 
     def = this->add("retract_restart_extra_toolchange", coFloats);
-    def->label = L("Extra length on restart");
+    def->label = L("Extra length on restart (Toolchange)");
     def->tooltip = L("When the retraction is compensated after changing tool, the extruder will push "
                   "this additional amount of filament.");
     def->sidetext = L("mm");	// millimeters, CIS languages need translation
@@ -6603,6 +7196,17 @@ void PrintConfigDef::init_fff_params()
                      "By default Orca skips the travel on multi-toolhead machines because the firmware handles the head swap, "
                      "which can result in the Tx command being issued above the printed part. "
                      "Enable this option if you want the tool change to always be issued above the wipe tower instead.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("wait_for_temp_on_wipe_tower", coBool);
+    def->label = L("Wait for temperature on wipe tower");
+    def->tooltip = L("Pick up the new tool without waiting for it to reach printing temperature, travel to the wipe "
+                     "tower, and wait for the temperature there, right before purging. Ooze from the heat-up lands on "
+                     "the tower instead of the model, and the travel overlaps with the heating. "
+                     "Only relevant for multi-extruder (multi-toolhead) printers using a Type 2 wipe tower. "
+                     "The firmware or tool change macro must not wait for the temperature itself. "
+                     "When disabled, the temperature wait is issued right after the tool change command.");
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionBool(false));
 
@@ -7445,6 +8049,14 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloats { 1. });
 
+    def = this->add("enable_mixed_color_sublayer", coBool);
+    def->label = L("Mixed color sublayer");
+    def->tooltip = L("Enable mixed color sublayer splitting. When enabled, layers containing mixed color "
+                     "filaments will be split into sub-layers to achieve color mixing effects.");
+    def->category = L("Quality");
+    def->mode = comSimple;
+    def->set_default_value(new ConfigOptionBool(false));
+
     def = this->add("enable_prime_tower", coBool);
     def->label = L("Enable");
     def->tooltip = L("The wiping tower can be used to clean up residue on the nozzle and stabilize the chamber pressure inside the nozzle in order to avoid appearance defects when printing objects.");
@@ -8216,10 +8828,12 @@ void PrintConfigDef::init_extruder_option_keys()
         "long_retractions_when_cut",
         "retract_after_wipe",
         "retract_before_wipe",
+        "retract_length_toolchange",
         "retract_lift_above",
         "retract_lift_below",
         "retract_lift_enforce",
         "retract_restart_extra",
+        "retract_restart_extra_toolchange",
         "retract_when_changing_layer",
         "retraction_distances_when_cut",
         "retraction_length",
@@ -9311,6 +9925,8 @@ std::set<std::string> filament_options_with_variant = {
     "filament_retract_lift_below",
     "filament_retract_lift_enforce",
     "filament_retract_restart_extra",
+    "filament_retract_length_toolchange",
+    "filament_retract_restart_extra_toolchange",
     "filament_retraction_speed",
     "filament_deretraction_speed",
     "filament_retraction_minimum_travel",
@@ -9648,7 +10264,15 @@ t_config_option_keys DynamicPrintConfig::normalize_fdm_2(int num_objects, int us
         ConfigOptionBool *enable_wrapping_opt = this->option<ConfigOptionBool>("enable_wrapping_detection");
         bool enable_wrapping = enable_wrapping_opt != nullptr && enable_wrapping_opt->value;
 
-        if (!is_smooth_timelapse && !enable_wrapping && (used_filaments == 1 || (ps_opt->value == PrintSequence::ByObject && num_objects > 1))) {
+        bool has_mixed_filament = false;
+        {
+            auto *mixed_opt = this->option<ConfigOptionBools>("filament_is_mixed");
+            if (mixed_opt)
+                has_mixed_filament = has_any_mixed_filament(mixed_opt->values);
+        }
+        if (!is_smooth_timelapse && !enable_wrapping
+            && (  (used_filaments == 1 && !has_mixed_filament)
+                || (ps_opt->value == PrintSequence::ByObject && num_objects > 1))) {
             if (ept_opt->value) {
                 ept_opt->value = false;
                 changed_keys.push_back("enable_prime_tower");
@@ -10468,6 +11092,16 @@ int DynamicPrintConfig::update_values_from_multi_to_multi_2(const std::vector<st
 
 }
 
+void set_variant_override(ConfigOptionVectorBase &target, const ConfigOptionVectorBase &source,
+                          const std::vector<int> &variant_index, int stride)
+{
+    // A single-value object or region override applies to every nozzle variant.
+    std::vector<int> indices = variant_index;
+    if (source.size() == 1 && !source.is_nil(0))
+        std::fill(indices.begin(), indices.end(), 0);
+    target.set_to_index(&source, indices, stride);
+}
+
 
 //used for object/region config
 //use the smallest of multiple to single
@@ -10601,6 +11235,44 @@ int DynamicPrintConfig::get_extruder_nozzle_volume_count(int extruder_count, std
     return count;
 }
 
+// Orca: BBL system profiles ship full-width print_extruder_id/print_extruder_variant columns, but
+// custom multi-extruder printers only ever get the machine-scope columns synthesized for them (see
+// extend_extruder_variant); the process scope keeps the length-1 defaults, both in presets and in
+// 3mf project configs. Expanding with that degenerate map makes every per-extruder lookup fail, and
+// because both keys are themselves in print_options_with_variant, the expansion then latches a
+// full-width-but-wrong [1,1,...] map that also defeats the generated_extruder_id fallback in
+// get_index_for_extruder. Synthesize the process columns from the printer's extruder_variant_list
+// (same token walk as extend_extruder_variant) before expanding.
+static void ensure_process_variant_columns(DynamicPrintConfig &config, const DynamicPrintConfig &printer_config)
+{
+    auto id_opt      = dynamic_cast<ConfigOptionInts *>(config.option("print_extruder_id"));
+    auto variant_opt = dynamic_cast<ConfigOptionStrings *>(config.option("print_extruder_variant"));
+    auto list_opt    = dynamic_cast<const ConfigOptionStrings *>(printer_config.option("extruder_variant_list"));
+    if (!id_opt || !variant_opt || !list_opt)
+        return;
+    if (id_opt->values.size() != 1 || variant_opt->values.size() != 1)
+        return;
+
+    std::vector<int>         ids;
+    std::vector<std::string> variants;
+    for (int i = 0; i < int(list_opt->values.size()); ++i) {
+        std::vector<std::string> tokens;
+        boost::split(tokens, list_opt->get_at(i), boost::is_any_of(","), boost::token_compress_on);
+        for (std::string &token : tokens) {
+            boost::trim(token);
+            if (token.empty())
+                continue;
+            ids.push_back(i + 1);
+            variants.push_back(token);
+        }
+    }
+    // A single column is the legitimate single-extruder layout, not a degenerate one.
+    if (ids.size() <= 1)
+        return;
+    id_opt->values      = std::move(ids);
+    variant_opt->values = std::move(variants);
+}
+
 std::vector<int> DynamicPrintConfig::update_values_to_printer_extruders(DynamicPrintConfig& printer_config, int extruder_count, int extruder_nozzle_volume_count, std::vector<std::vector<NozzleVolumeType>>& nv_types,
     std::set<std::string>& key_set, std::string id_name, std::string variant_name, unsigned int stride, unsigned int extruder_id, NozzleVolumeType filament_nvt)
 {
@@ -10642,6 +11314,8 @@ std::vector<int> DynamicPrintConfig::update_values_to_printer_extruders(DynamicP
         variant_count = 1;
     }
     else {
+        if (id_name == "print_extruder_id")
+            ensure_process_variant_columns(*this, printer_config);
         // Orca: emit the slots first, then size variant_count from what was actually
         // emitted. extruder_nozzle_volume_count only equals the emitted total when every
         // extruder carries per-type stats; an extruder with an empty stats entry combined
@@ -11505,7 +12179,7 @@ void update_static_print_config_from_dynamic(ConfigBase& config, const DynamicPr
                 else {
                     ConfigOptionVectorBase* opt_vec_src = static_cast<ConfigOptionVectorBase*>(opt_src);
                     const ConfigOptionVectorBase* opt_vec_dest = static_cast<const ConfigOptionVectorBase*>(opt_dest);
-                    opt_vec_src->set_to_index(opt_vec_dest, variant_index, stride);
+                    set_variant_override(*opt_vec_src, *opt_vec_dest, variant_index, stride);
                 }
             }
         }
@@ -11744,6 +12418,23 @@ std::map<std::string, std::string> validate(const FullPrintConfig &cfg, bool und
                 error_message.emplace(opt_key, opt->serialize() + L(" not in range ") +"[" + std::to_string(optdef->min) + "," + std::to_string(optdef->max) + "]");
             //return std::string("Value out of range: " + opt_key);
         }
+    }
+
+    // Mixed-color (混色) parameter validation.
+    {
+        const auto &is_mixed       = cfg.filament_is_mixed.values;
+        const auto &comp_strs      = cfg.filament_mixed_components.values;
+        const auto &ratio_strs     = cfg.filament_mixed_sublayer_ratios.values;
+        const auto &gradient_flags = cfg.filament_mixed_gradient.values;
+        const auto &range_strs     = cfg.filament_mixed_gradient_range.values;
+        const auto &curve_strs     = cfg.filament_mixed_gradient_curve.values;
+
+        std::map<std::string, std::string> mixed_errors = validate_mixed_filament_params(
+            is_mixed, comp_strs, ratio_strs, gradient_flags,
+            range_strs, curve_strs);
+        for (const auto &kv : mixed_errors)
+            if (error_message.find(kv.first) == error_message.end())
+                error_message.emplace(kv.first, kv.second);
     }
 
     // The configuration is valid.

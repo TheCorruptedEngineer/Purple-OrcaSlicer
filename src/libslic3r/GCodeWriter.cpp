@@ -3,6 +3,7 @@
 #include "I18N.hpp"
 #include "PrintConfig.hpp"
 #include "ClipperUtils.hpp"
+#include "Geometry/ArcWelder.hpp"
 #include "Line.hpp"
 #include <algorithm>
 #include <iomanip>
@@ -748,6 +749,12 @@ std::string GCodeWriter::set_speed(double F, const std::string &comment, const s
 
 std::string GCodeWriter::travel_to_xy(const Vec2d &point, const std::string &comment)
 {
+    return this->travel_to_xy(point, 0.0, comment);
+}
+
+// Orca: wave-overhang — variant accepting an explicit speed override (mm/s). 0 = use config.
+std::string GCodeWriter::travel_to_xy(const Vec2d &point, double speed_override, const std::string &comment)
+{
     m_pos(0) = point(0);
     m_pos(1) = point(1);
 
@@ -759,6 +766,8 @@ std::string GCodeWriter::travel_to_xy(const Vec2d &point, const std::string &com
     w.emit_xy(point_on_plate);
     auto speed = m_is_first_layer
         ? this->config.get_abs_value_at("initial_layer_travel_speed", m_cached_extruder_idx) : this->config.travel_speed.get_at(m_cached_extruder_idx);
+    if (speed_override > 0.0)
+        speed = speed_override;
     w.emit_f(speed * 60.0);
     //BBS
     w.emit_comment(GCodeWriter::full_gcode_comment, comment);
@@ -837,6 +846,12 @@ std::string GCodeWriter::eager_lift(const LiftType type) {
 
 std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const std::string &comment, bool force_z)
 {
+    return this->travel_to_xyz(point, 0.0, comment, force_z);
+}
+
+// Orca: wave-overhang — variant accepting an explicit speed override (mm/s). 0 = use config.
+std::string GCodeWriter::travel_to_xyz(const Vec3d &point, double speed_override, const std::string &comment, bool force_z)
+{
     // FIXME: This function was not being used when travel_speed_z was separated (bd6badf).
     // Calculation of feedrate was not updated accordingly. If you want to use
     // this function, fix it first.
@@ -850,6 +865,8 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const std::string &co
     Vec3d dest_point = point;
     auto travel_speed =
         m_is_first_layer ? this->config.get_abs_value_at("initial_layer_travel_speed", m_cached_extruder_idx) : this->config.travel_speed.get_at(m_cached_extruder_idx);
+    if (speed_override > 0.0)
+        travel_speed = speed_override;
     //BBS: a z_hop need to be handle when travel
     if (std::abs(m_to_lift) > EPSILON) {
         assert(std::abs(m_lifted) < EPSILON);
@@ -938,7 +955,7 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const std::string &co
             m_lifted = 0.;
         //BBS
         this->set_current_position_clear(true);
-        return this->travel_to_xy(to_2d(point));
+        return this->travel_to_xy(to_2d(point), speed_override);
     }
     else {
         /*  In all the other cases, we perform an actual XYZ move and cancel
@@ -948,19 +965,21 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const std::string &co
 
     //BBS: take plate offset into consider
     Vec3d point_on_plate = { dest_point(0) - m_x_offset, dest_point(1) - m_y_offset, dest_point(2) };
+    // Orca: wave-overhang — honor speed override (mm/s). 0 = use config.
+    const double xyz_speed = (speed_override > 0.0) ? speed_override : this->config.travel_speed.get_at(m_cached_extruder_idx);
     std::string out_string;
     GCodeG1Formatter w;
     if (!this->is_current_position_clear())
     {
         //force to move xy first then z after filament change
         w.emit_xy(Vec2d(point_on_plate.x(), point_on_plate.y()));
-        w.emit_f(this->config.travel_speed.get_at(m_cached_extruder_idx) * 60.0);
+        w.emit_f(xyz_speed * 60.0);
         w.emit_comment(GCodeWriter::full_gcode_comment, comment);
         out_string = w.string() + _travel_to_z(point_on_plate.z(), comment);
     } else {
         GCodeG1Formatter w;
         w.emit_xyz(point_on_plate);
-        w.emit_f(this->config.travel_speed.get_at(m_cached_extruder_idx) * 60.0);
+        w.emit_f(xyz_speed * 60.0);
         w.emit_comment(GCodeWriter::full_gcode_comment, comment);
         out_string = w.string();
     }
@@ -1018,45 +1037,48 @@ std::string GCodeWriter::_spiral_travel_to_z(double z, const Vec2d &ij_offset, c
     }
 
     if (!this->config.enable_arc_fitting) { // Orca: if arc fitting is disabled, approximate the arc with small linear segments
-        std::ostringstream oss;
         const double z_start = m_pos(2); // starting Z height
-
-        // --------------------------------------------------------------------
-        // Determine number of segments based on Resolution
-        // --------------------------------------------------------------------
-        const double ref_resolution = 0.01; // reference resolution in mm
-        const double ref_segments  = 8.0;  // reference number of segments at reference resolution
-        
-        // number of linear segments to use for approximating the arc, clamp between 4 and 16
-        const int segments = std::clamp(int(std::round(ref_segments * (ref_resolution / m_resolution))), 4, 16);
-        // --------------------------------------------------------------------
 
         const double px = m_pos(0) - m_x_offset;        // take plate offset into consideration
         const double py = m_pos(1) - m_y_offset;        // take plate offset into consideration
         const double cx = px + ij_offset(0);            // center x
         const double cy = py + ij_offset(1);            // center y
         const double radius = ij_offset.norm();         // radius
+
+        // Number of linear segments approximating the circle, chosen so that a chord never deviates
+        // from the true arc by more than the slicing resolution. A resolution of 0 means "no
+        // simplification", which has no finite segment count, so it takes the upper bound.
+        constexpr size_t min_segments = 8;              // keep a small spiral visibly round
+        constexpr size_t max_segments = 128;            // bound the emitted G-code
+        const int segments = int(m_resolution > 0. ?
+            std::clamp(Geometry::ArcWelder::arc_discretization_steps(radius, 2. * M_PI, m_resolution), min_segments, max_segments) :
+            max_segments);
+
         const double a0 = std::atan2(py - cy, px - cx); // start angle
-        const double delta = 2.0 * M_PI;                // CCW full circle
 
-        if (full_gcode_comment)
-            oss << ";" << comment << "\n";
+        auto emit_point = [&output](const Vec3d &point) {
+            GCodeG1Formatter w;
+            w.emit_xyz(point);
+            output += w.string();
+        };
 
-        oss << "G1 F" << (speed * 60.0) << "\n";  // set feedrate
+        output.reserve(size_t(segments) * 40);          // ~40 characters per emitted G1 line
+
+        GCodeG1Formatter w;                             // set feedrate
+        w.emit_f(speed * 60.0);
+        w.emit_comment(GCodeWriter::full_gcode_comment, comment);
+        output += w.string();
 
         // approximate the arc with small linear segments (without the last point which is added later to ensure exactness)
         for (int i = 1; i < segments; ++i) {
-            double t = double(i) / segments;            // parametric position along arc
-            double a = a0 + delta * t;                  // CCW arc param
-            double x = cx + radius * std::cos(a);       // point on circle
-            double y = cy + radius * std::sin(a);       // point on circle
-            double zz = z_start + (z - z_start) * t;    // interpolated Z height
-
-            oss << "G1 X" << x << " Y" << y << " Z" << zz << "\n";
+            const double t = double(i) / segments;      // parametric position along arc
+            const double a = a0 + 2. * M_PI * t;        // CCW arc param, full circle
+            emit_point(Vec3d(cx + radius * std::cos(a), // point on circle
+                             cy + radius * std::sin(a),
+                             z_start + (z - z_start) * t)); // interpolated Z height
         }
 
-        oss << "G1 X" << px << " Y" << py << " Z" << z << "\n";  // final point to ensure exactness
-        output = oss.str();
+        emit_point(Vec3d(px, py, z));                   // final point to ensure exactness
     } else { // Orca: if arc fitting is enabled emit a G2/G3 command for the spiral lift
         output = std::string("G17") + (full_gcode_comment ? " ; XY plane for arc\n" : "\n");
 

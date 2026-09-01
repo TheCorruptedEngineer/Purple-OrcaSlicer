@@ -65,7 +65,7 @@ public:
         , m_label(label)
         , m_url(url)
     {
-#ifndef __WXOSX__ 
+#ifndef __WXOSX__
         SetDoubleBuffered(true);// SetDoubleBuffered exists on Win and Linux/GTK, but is missing on OSX
 #endif
         SetBackgroundColour(parent->GetBackgroundColour());
@@ -79,7 +79,7 @@ public:
         Bind(wxEVT_LEFT_DOWN,    &WikiLabel::OnLeftDown, this);
     }
 
-    void SetLabel(const wxString& label)
+    void SetLabel(const wxString& label) override
     {
         m_label = label;
         m_last_wrap_width = -1; // force re-wrap
@@ -106,7 +106,7 @@ public:
     void ReflowText()
     {
         const int clientW = GetClientSize().GetWidth();
- 
+
         if (clientW <= 0 || (clientW == m_last_wrap_width && !m_lines.IsEmpty()))
             return;
 
@@ -137,33 +137,33 @@ public:
             }
         }
         m_lines = lines;
- 
+
         const int lineH  = wxMax(1, wxWindow::GetCharHeight()); // GTK can return 0 from GetCharHeight() before the window is realized
         const int nLines = m_lines.IsEmpty() ? 1 : static_cast<int>(m_lines.size());
         const int totalH = static_cast<int>(nLines * lineH * 1.3);
- 
+
         SetMinSize(wxSize(-1, totalH));
         InvalidateBestSize();
     }
- 
+
     wxSize DoGetBestSize() const override
     {
         const int lineH  = wxMax(1, wxWindow::GetCharHeight()); // GTK can return 0 from GetCharHeight() before the window is realized
         const int nLines = m_lines.IsEmpty() ? 1 : static_cast<int>(m_lines.size());
         const int totalH = static_cast<int>(nLines * lineH * 1.3);
- 
+
         const int clientW = GetClientSize().GetWidth();
- 
+
         if (clientW > 0)
             return wxSize(clientW, totalH);
- 
+
         if (m_label.IsEmpty())
             return wxSize(1, lineH);
- 
+
         int maxW = 0;
         for (const wxString& line : wxSplit(m_label, '\n'))
             maxW = wxMax(maxW, GetTextExtent(line).GetWidth());
- 
+
         return wxSize(wxMax(1, maxW), totalH);
     }
 
@@ -173,24 +173,24 @@ public:
         m_lines.Clear();
         InvalidateBestSize();
     }
- 
+
 private:
     void OnPaint(wxPaintEvent& evt)
     {
         wxPaintDC dc(this);
- 
+
         dc.SetBackground(wxBrush(GetParent() ? GetParent()->GetBackgroundColour() : *wxWHITE));
         dc.Clear();
- 
+
         wxColour textCol = StateColor::darkModeColorFor(m_hovered ? "#C060FF" : "#363636");
- 
+
         dc.SetTextForeground(textCol);
         dc.SetFont(m_font);
         dc.SetBackgroundMode(wxTRANSPARENT);
- 
+
         int lineH = dc.GetCharHeight();
         int y     = lround(lineH * 0.15);
- 
+
         for (const wxString& line : m_lines) {
             if (!line.IsEmpty()) {
                 dc.DrawText(line, 0, y);
@@ -198,7 +198,7 @@ private:
                 if (m_hovered) {
                     int tw, th;
                     dc.GetTextExtent(line, &tw, &th);
- 
+
                     int underlineY = y + lineH - 1; // 1 px below the baseline
                     dc.SetPen(wxPen(textCol, 1));
                     dc.DrawLine(0, underlineY, tw, underlineY);
@@ -207,7 +207,7 @@ private:
             y += lineH;
         }
     }
- 
+
     void OnSize(wxSizeEvent& evt)
     {
         ReflowText();
@@ -223,7 +223,7 @@ private:
         }
         evt.Skip();
     }
- 
+
     void OnLeaveWin(wxMouseEvent& evt)
     {
         if(!m_url.IsEmpty() && m_hovered){
@@ -232,13 +232,13 @@ private:
         }
         evt.Skip();
     }
- 
+
     void OnLeftDown(wxMouseEvent& evt)
     {
         if (!m_url.IsEmpty())
             wxLaunchDefaultBrowser(m_url);
         evt.Skip();
-    } 
+    }
 };
 
 wxBoxSizer *PreferencesDialog::create_item_title(wxString title)
@@ -262,7 +262,7 @@ wxBoxSizer *PreferencesDialog::create_item_label(wxString label, wxString toolti
 
     wxString url;
     if(!wiki_url.IsEmpty())
-        url = "https://www.orcaslicer.com/wiki/" + wiki_url;
+        url = "https://github.com/NanashiTheNameless/OrcaSlicer/wiki/" + wiki_url;
 
     auto label_ctrl = new WikiLabel(m_parent, label, url, wxDefaultPosition, DESIGN_TITLE_SIZE);
 
@@ -986,7 +986,7 @@ wxBoxSizer* PreferencesDialog::create_item_darkmode(wxString title,wxString tool
         e.Skip();
         });
 
-    
+
     return m_sizer;
 }
 
@@ -1133,6 +1133,14 @@ wxBoxSizer *PreferencesDialog::create_item_checkbox(wxString title, wxString too
 
         if (param == "show_unsupported_presets") {
             wxGetApp().plater()->sidebar().update_presets(Preset::TYPE_FILAMENT);
+        }
+
+        if (param == "use_printer_agents")
+        {
+            // Rebuild the Device tab so the native/web-UI choice reflects the new flag
+            // immediately, instead of only on the next printer-preset change or restart.
+            if (wxGetApp().plater())
+                wxGetApp().plater()->sidebar().update_all_preset_comboboxes();
         }
 
         if (param == "enable_high_low_temp_mixed_printing") {
@@ -1552,7 +1560,7 @@ void PreferencesDialog::on_dpi_changed(const wxRect &suggested_rect) {
                 lbl->SetSize(DESIGN_TITLE_SIZE);
                 lbl->Rescale();
             }
-                
+
             WalkControls(child, depth + 1);
         }
     };
@@ -1658,7 +1666,7 @@ void PreferencesDialog::create_items()
     g_sizer->Add(item_project_load);
 
     auto item_backup           = create_item_backup(_L("Auto backup"), _L("Backup your project periodically to help with restoring from an occasional crash."));
-    g_sizer->Add(item_backup); 
+    g_sizer->Add(item_backup);
 
     auto item_max_recent_count = create_item_input(_L("Maximum recent files"), "", _L("Maximum count of recent files"), "max_recent_count", [](wxString value) {
         long max = 0;
@@ -1674,7 +1682,7 @@ void PreferencesDialog::create_items()
     g_sizer->Add(item_gcodes_warning);
 
     auto item_step_dialog = create_item_checkbox(
-        _L("Show options when importing STEP file"), _L("If enabled, a parameter settings dialog will appear during STEP file import."), 
+        _L("Show options when importing STEP file"), _L("If enabled, a parameter settings dialog will appear during STEP file import."),
         "enable_step_mesh_setting", wxEmptyString, "import_export#dont-show-again"
     );
     g_sizer->Add(item_step_dialog);
@@ -1739,6 +1747,21 @@ void PreferencesDialog::create_items()
     auto item_pop_up_filament_map_dialog = create_item_checkbox(_L("Pop up to select filament grouping mode"), _L("Pop up to select filament grouping mode"), 50, "pop_up_filament_map_dialog");
     g_sizer->Add(item_pop_up_filament_map_dialog);
 #endif
+
+    //// GENERAL > Plugins
+    g_sizer->Add(create_item_title(_L("Plugins")), 1, wxEXPAND);
+
+    auto item_plugin_pages_visible_count = create_item_spinctrl(
+        _L("Visible plugin pages"),
+        "",
+        _L("pages"),
+        _L("Number of plugin pages shown as fixed tabs before the remaining pages collapse into a dropdown on the last tab."),
+        SETTING_PLUGIN_PAGES_VISIBLE_COUNT,
+        PLUGIN_PAGES_VISIBLE_COUNT_MIN,
+        PLUGIN_PAGES_VISIBLE_COUNT_MAX,
+        [](int value) { wxGetApp().mainframe->plugin_pages().set_visible_page_count(value); }
+    );
+    g_sizer->Add(item_plugin_pages_visible_count);
 
     g_sizer->AddSpacer(FromDIP(10));
     sizer_page->Add(g_sizer, 0, wxEXPAND);
@@ -2094,9 +2117,15 @@ void PreferencesDialog::create_items()
 
     auto item_ams_blacklist    = create_item_checkbox(_L("Skip AMS blacklist check"), "", "skip_ams_blacklist_check");
     g_sizer->Add(item_ams_blacklist);
-  
+
     auto item_show_unsupported = create_item_checkbox(_L("Show unsupported presets"), _L("Show incompatible/unsupported presets in the printer and filament dropdown lists. These presets cannot be selected."), "show_unsupported_presets");
     g_sizer->Add(item_show_unsupported);
+
+    auto item_plugin_printer_agents = create_item_checkbox(
+        _L("(Experimental) Use printer agents instead of print hosts"), _L(
+            "Route print jobs for non-Bambu printers through printer plug-in agents instead of the classic print-host upload flow.\nWhen disabled, OrcaSlicer uses the legacy print-host behavior."),
+        "use_printer_agents");
+    g_sizer->Add(item_plugin_printer_agents);
 
     //// DEVELOPER > Experimental Features
     g_sizer->Add(create_item_title(_L("Experimental Features")), 1, wxEXPAND);
