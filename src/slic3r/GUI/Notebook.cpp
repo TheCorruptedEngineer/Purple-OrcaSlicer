@@ -126,7 +126,7 @@ void ButtonsListCtrl::SetSelection(int sel)
     wxColour selected_btn_bg("#B13CFF");    // Gradient #B13CFF
     if (m_selection >= 0) {
         StateColor bg_color = StateColor(
-        std::pair{wxColour(107, 107, 107), (int) StateColor::Hovered},
+        std::pair{wxColour(200, 111, 255), (int) StateColor::Hovered}, // Matches Slice plate button hover (#C86FFF, SideButton.cpp)
         std::pair{wxColour(59, 68, 70), (int) StateColor::Normal});
         m_pageButtons[m_selection]->SetBackgroundColor(bg_color);
         StateColor text_color = StateColor(
@@ -161,7 +161,7 @@ bool ButtonsListCtrl::InsertPage(size_t n, const wxString &text, bool bSelect /*
     btn->SetMinSize({(text.empty() ? 40 : 136) * em / 10, 36 * em / 10});
 
     StateColor bg_color = StateColor(
-        std::pair{wxColour(107, 107, 107), (int) StateColor::Hovered},
+        std::pair{wxColour(200, 111, 255), (int) StateColor::Hovered}, // Matches Slice plate button hover (#C86FFF, SideButton.cpp)
         std::pair{wxColour(59, 68, 70), (int) StateColor::Normal});
 
     btn->SetBackgroundColor(bg_color);
