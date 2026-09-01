@@ -72,6 +72,10 @@ Defined by the fork's own commits; use these exact values when purpling new upst
 | `#BFE1DE` | `#BFDCFF` | accent @ 25% |
 | `#00AE42` | `#B13CFF` | selection accent |
 | `ImVec4(0, 0.588, 0.533, 1)` | `ImVec4(0.694f, 0.235f, 1.0f, 1)` | ImGui accent |
+| `#4db6ac`, `#33aba1` | `#C060FF` | hover, in *icons and CSS* (see below) |
+| `#009687`, `#009789` | `#B13CFF` | primary accent, off-by-one typos of `#009688` |
+| `#02c7b3` | `#B13CFF` | accent border |
+| `#00f0d8` | `#B13CFF` | bright accent fill |
 
 ### Where the theme lives — prefer these seams over new hardcoded literals
 
@@ -86,10 +90,37 @@ Defined by the fork's own commits; use these exact values when purpling new upst
   upstream in favor of this.
 - `resources/images/*.svg` — ~421 icons carry the accent color directly.
 
+#### ⚠ Hover and focus states live in *separate files* — always purple the sibling
+
+This has bitten the theme twice. Several widgets are **bitmap-driven**, not color-driven:
+`Widgets/CheckBox.cpp` picks a whole different SVG per state via `SetBitmapLabel` /
+`SetBitmapCurrent` (hover) / `SetBitmapFocus` (focus) / `SetBitmapDisabled`. Purpling
+`check_on.svg` therefore does **nothing** for the hovered or focused box — that is
+`check_on_focused.svg`, a different file, and it stayed teal for months. A checkbox keeps
+focus after a click, so the stale bitmap is what the user actually stares at.
+
+The teals used for hover are *lighter* shades that the palette table's `#26A69A` row does not
+cover — `#4db6ac` (Material teal 300) and `#33aba1`. Both map to `#C060FF`.
+
+When purpling anything, grep for the siblings before declaring it done:
+
+```bash
+# every state variant of an icon you just touched
+ls resources/images/ | grep -E '^<basename>(_hover|_focused|_disabled|_dark)*\.svg$'
+# and the wider teal family, not just the palette table's exact values
+rg -i '4db6ac|33aba1|009687|009789|02c7b3|00f0d8|26a69a|009688' src resources
+```
+
 ### Do NOT purple these
 
 - **`src/libslic3r/PresetBundle.cpp`** — `#26A69A` there is the **default filament colour**
   written into project config. It's print data, not UI chrome.
+- **`src/slic3r/GUI/Plater.cpp`** — the `colors[FILAMENT_SYSTEM_COLORS_NUM]` palette
+  (`#00C1AE`, `#2EBDEF`, …) is the filament swatch list. Print data.
+- **`resources/profiles/**/*_bed_texture.svg`** — vendor bed artwork (e.g. Cubicon's
+  `#009789`). Not our chrome to repaint.
+- **`resources/flush/flush_data_*.txt`**, `resources/profiles/BBL/filament/filaments_color_codes.json`
+  — filament colour data that merely looks like hex chrome to a grep.
 - Semantic status colors (success/error/warning) and commented-out code.
 
 ---
@@ -188,10 +219,22 @@ Then launch `build\src\Release\orca-slicer.exe` and confirm it stays running.
 
 ---
 
-## Status / open items (2026-08-01)
+## Status / open items (2026-09-01)
 
-- Merged 1178 commits from `nanashi/main` (12 conflicts) and pushed to `origin/main`.
-  Backup ref: `backup-pre-merge-20260801`; merge branch: `merge-nanashi-20260801`.
-- Position after merge: ~28 behind Nanashi, ~29 behind upstream (Nanashi moved during the merge).
+- Merged `nanashi/main` @ `9e1d14adb2` (381 commits, 1074 files, **2 conflicts** — Notebook.cpp
+  and Preferences.cpp, both resolved by taking upstream structure + re-applying the purple).
+  Then merged `upstream/main` for the last 4 commits Nanashi had not picked up yet, which was
+  safe *only because* the Nanashi merge landed first — one conflict, `.github/workflows/build_all.yml`,
+  resolved in favour of the fork's copy (it carries our renamed-fork Flatpak path fix; upstream's
+  is gated on `github.repository == 'OrcaSlicer/OrcaSlicer'` and would never run here).
+- **Position: 0 behind Nanashi, 0 behind upstream.** Backup ref: `backup-pre-merge-20260901`;
+  merge branch: `merge-nanashi-20260901`. Version stays `2.5.0-Kurisu`.
+- Purpled the accent teal in the three dialogs the merge introduced
+  (`ColorDecomposeDialog`, `MixedFilamentDialog`, `TextureImportDialog` — 15 literals).
+- Fixed the checkbox hover/focus regression (teal `#4db6ac` on `check_*_focused.svg`) and the
+  five other normal-purpled / hover-teal splits it shared a root cause with. See the
+  "Hover and focus states live in separate files" note above — that is the durable lesson.
 - **README release links still point at the `V2.4.0-Kurisu` tag** (3 places) while the version
   is now `2.5.0-Kurisu`. Needs a new tag + link update — a release decision, left to the owner.
+- Nanashi's CI restructure (clang-cl Windows builds, the `build_win.bat` test job) will arrive
+  on their next upstream merge; nothing to do here.
